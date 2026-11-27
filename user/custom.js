@@ -74,9 +74,9 @@
     modelMenu: effectiveModBool('claudeUxModelMenu', true),
     inlineUndo: effectiveModBool('claudeUxInlineUndo', true),
     folderStatus: effectiveModBool('claudeUxFolderStatus', true),
-    recentSection: effectiveModBool('claudeUxRecentSection', false),
+    recentSection: effectiveModBool('claudeUxRecentSection', true),
     projects: effectiveModBool('claudeUxProjects', true),
-    hideSidebarProjects: effectiveModBool('claudeUxHideSidebarProjects', true),
+    hideSidebarProjects: effectiveModBool('claudeUxHideSidebarProjects', false),
     customizations: effectiveModBool('claudeUxCustomizations', true),
     codeFold: effectiveModBool('claudeUxCodeFold', true),
     overviewPanel: effectiveModBool('claudeUxOverviewPanel', true)
@@ -6859,6 +6859,14 @@
           'Adds a Claude-style Projects nav entry between Automations and Skills to manage local AGENTS.md, context files & scheduled tasks'
         ],
         [
+          'claudeUxRecentSection',
+          'recentSection',
+          '侧栏顶部「最近对话」',
+          'Top Sidebar Recents',
+          '保留左侧原生分项目二级目录的同时，在顶部展示可折叠的「最近对话」快捷列表（与分项目视图共存）',
+          'Shows a collapsible Recents quick section above the native per-project sidebar list so both views coexist'
+        ],
+        [
           'claudeUxHideSidebarProjects',
           'hideSidebarProjects',
           '侧栏统一「最近对话」',
@@ -7000,7 +7008,10 @@
     } else if (featKey === 'projects') {
       if (!on) teardownProjectsWorkspace();
       else syncProjectsWorkspace();
+    } else if (featKey === 'recentSection') {
+      recentLastSig = '';
     } else if (featKey === 'hideSidebarProjects') {
+      recentLastSig = '';
       syncSidebarHideNativeProjects();
     } else if (featKey === 'customizations') {
       if (!on) teardownCustomizationsEnhancement();

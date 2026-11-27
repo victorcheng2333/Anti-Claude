@@ -20,9 +20,9 @@
     "claudeUxModelMenu": true,
     "claudeUxInlineUndo": true,
     "claudeUxFolderStatus": true,
-    "claudeUxRecentSection": false,
+    "claudeUxRecentSection": true,
     "claudeUxProjects": true,
-    "claudeUxHideSidebarProjects": true,
+    "claudeUxHideSidebarProjects": false,
     "claudeUxCustomizations": true,
     "claudeUxCodeFold": true,
     "claudeUxOverviewPanel": true

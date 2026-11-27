@@ -546,11 +546,17 @@ test('native Settings -> UI Enhancements panel: defaults to English and live-tog
   assert.equal(projectsSwitch.getAttribute('aria-checked'), 'false');
   assert.match(h.window.localStorage.getItem('ag_claude_ux_modules_v1') || '', /"claudeUxProjects":false/);
 
+  const recentSwitch = panel.querySelector('[data-ag-cux-switch="claudeUxRecentSection"]');
+  assert.equal(recentSwitch.getAttribute('aria-checked'), 'true');
+  recentSwitch.click();
+  assert.equal(recentSwitch.getAttribute('aria-checked'), 'false');
+  assert.match(h.window.localStorage.getItem('ag_claude_ux_modules_v1') || '', /"claudeUxRecentSection":false/);
+
   const hideProjSwitch = panel.querySelector('[data-ag-cux-switch="claudeUxHideSidebarProjects"]');
-  assert.equal(hideProjSwitch.getAttribute('aria-checked'), 'true');
-  hideProjSwitch.click();
   assert.equal(hideProjSwitch.getAttribute('aria-checked'), 'false');
-  assert.match(h.window.localStorage.getItem('ag_claude_ux_modules_v1') || '', /"claudeUxHideSidebarProjects":false/);
+  hideProjSwitch.click();
+  assert.equal(hideProjSwitch.getAttribute('aria-checked'), 'true');
+  assert.match(h.window.localStorage.getItem('ag_claude_ux_modules_v1') || '', /"claudeUxHideSidebarProjects":true/);
 
   h.doc.querySelector('button[data-testid="settings-nav-item-General"]').click();
   assert.equal(rightHost.hasAttribute('data-ag-claude-settings-open'), false, 'clicking native nav item restores native settings pane');
