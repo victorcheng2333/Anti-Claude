@@ -124,6 +124,23 @@ html[data-ag-cjk-scale="100"] {
   --ag-sans-stack: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, 'PingFang SC', 'Hiragino Sans GB', 'Microsoft YaHei UI', 'Segoe UI', Roboto, sans-serif;
 }
 
+:root {
+  --ag-ui-font-size: 13px;
+  --ag-chat-font-size: 14px;
+}
+
+html[data-ag-ui-font-size="12"] { --ag-ui-font-size: 12px; }
+html[data-ag-ui-font-size="13"] { --ag-ui-font-size: 13px; }
+html[data-ag-ui-font-size="14"] { --ag-ui-font-size: 14px; }
+html[data-ag-ui-font-size="15"] { --ag-ui-font-size: 15px; }
+html[data-ag-ui-font-size="16"] { --ag-ui-font-size: 16px; }
+
+html[data-ag-chat-font-size="13"] { --ag-chat-font-size: 13px; }
+html[data-ag-chat-font-size="14"] { --ag-chat-font-size: 14px; }
+html[data-ag-chat-font-size="15"] { --ag-chat-font-size: 15px; }
+html[data-ag-chat-font-size="16"] { --ag-chat-font-size: 16px; }
+html[data-ag-chat-font-size="18"] { --ag-chat-font-size: 18px; }
+
 :root,
 html,
 body,
@@ -145,7 +162,6 @@ body[data-agy-font] :where(.font-sans),
   --sdk-font-family: var(--font-sans) !important;
   --sdk-font-family-mono: var(--font-mono) !important;
   --sdk-comment-font-family: var(--font-sans) !important;
-  --ag-chat-font-size: 14px;
   text-autospace: normal !important;
   text-spacing-trim: normal !important;
   -webkit-font-smoothing: antialiased !important;
@@ -164,8 +180,8 @@ body[data-agy-font] :where(.font-sans),
   -webkit-font-smoothing: antialiased !important;
 }
 
-:is([data-testid="planner-response-text"], [data-markdown-root], .prose, .markdown) :is(p, li, blockquote) {
-  font-size: 14px !important;
+:is([data-testid="planner-response-text"], [data-markdown-root], .prose, .markdown) :is(p, li, blockquote, td, th) {
+  font-size: var(--ag-chat-font-size, 14px) !important;
   line-height: 1.65 !important;
   color: var(--foreground) !important;
   text-wrap: pretty !important;
@@ -190,18 +206,22 @@ body[data-agy-font] :where(.font-sans),
 }
 
 :is([data-testid="planner-response-text"], [data-markdown-root], .prose, .markdown) h3 {
-  font-size: 14.5px !important;
+  font-size: calc(var(--ag-chat-font-size, 14px) + 0.5px) !important;
 }
 
 :is([data-testid="planner-response-text"], [data-markdown-root], .prose, .markdown) h2 {
-  font-size: 15.5px !important;
+  font-size: calc(var(--ag-chat-font-size, 14px) + 1.5px) !important;
 }
 
-/* User message bubbles: keep calibrated sans-serif 14px / 1.6 (excluding compact mention/skill pills & links) */
+:is([data-testid="planner-response-text"], [data-markdown-root], .prose, .markdown) h1 {
+  font-size: calc(var(--ag-chat-font-size, 14px) + 3px) !important;
+}
+
+/* User message bubbles: keep calibrated sans-serif / 1.6 (excluding compact mention/skill pills & links) */
 :is([data-testid="user-input-step"], [data-testid="user-message-content"], .agy-user-bubble),
 :is([data-testid="user-input-step"], [data-testid="user-message-content"], .agy-user-bubble) :is(p, span, div, li, .select-text):not(code):not(pre):not(.font-mono):not([data-testid="skill-scope-item-pill"]):not([data-testid="skill-scope-item-pill"] *):not(bdi.context-scope-mention *) {
   font-family: var(--font-sans) !important;
-  font-size: 14px !important;
+  font-size: var(--ag-chat-font-size, 14px) !important;
   font-weight: 400 !important;
   line-height: 1.6 !important;
   letter-spacing: 0 !important;
@@ -348,8 +368,10 @@ div[contenteditable="true"] :is(p, span, div, li),
 #antigravity\.agentSidePanelInputBox div:has(> [data-lexical-editor="true"]) > p.pointer-events-none,
 [data-testid="ask-question-writein"],
 .ProseMirror,
-.ProseMirror :is(p, span) {
-  font-size: 14px !important;
+.ProseMirror :is(p, span),
+[data-lexical-editor],
+[data-lexical-editor] :is(p, span) {
+  font-size: var(--ag-chat-font-size, 14px) !important;
   font-weight: 400 !important;
   line-height: 1.6 !important;
 }
@@ -385,7 +407,7 @@ div[contenteditable="true"] :is(p, span, div, li),
 /* Code blocks & inline code: preserve exact monospace metrics without CJK autospace injection */
 :is([data-testid="planner-response-text"], [data-markdown-root], [data-testid="user-message-content"], .agy-user-bubble, .select-text, .prose, .markdown, article) :is(code, pre, pre *, kbd, samp, .font-mono, [class*="language-"]) {
   font-family: var(--font-mono) !important;
-  font-size: 12.8px !important;
+  font-size: calc(var(--ag-chat-font-size, 14px) - 1.2px) !important;
   text-autospace: no-autospace !important;
   text-spacing-trim: space-all !important;
 }
@@ -583,9 +605,9 @@ html body .bg-sidebar [data-testid="conversation-row-sidebar"][data-selected="tr
 html body .bg-sidebar :is([data-active="true"], [data-active=""]),
 html body .bg-sidebar :is([data-active="true"], [data-active=""]) span.truncate {
   font-family: var(--font-sans) !important;
-  font-size: 14px !important;
+  font-size: var(--ag-ui-font-size, 13px) !important;
   font-weight: 400 !important;
-  line-height: 20px !important;
+  line-height: calc(var(--ag-ui-font-size, 13px) + 6px) !important;
   letter-spacing: 0 !important;
   text-shadow: none !important;
   color: var(--ag-sidebar-fg, #141413) !important;
@@ -596,9 +618,9 @@ html body .bg-sidebar .group\/section-header :is(h2, button, span.truncate),
 html body .bg-sidebar :is([class*="text-muted"], [class*="text-[11px]"], [class*="uppercase"], [class*="text-xs"]),
 html body .bg-sidebar :is([data-testid="conversation-row-sidebar"], .agy-sidebar-row) :is(span.text-sm.opacity-60, [class*="opacity-60"], [class*="text-xs"]) {
   font-family: var(--font-sans) !important;
-  font-size: 12px !important;
+  font-size: max(10.5px, calc(var(--ag-ui-font-size, 13px) - 1.5px)) !important;
   font-weight: 400 !important;
-  line-height: 16px !important;
+  line-height: calc(var(--ag-ui-font-size, 13px) + 2.5px) !important;
   letter-spacing: 0 !important;
   text-shadow: none !important;
   opacity: 1 !important;
@@ -1369,9 +1391,9 @@ html:not([data-ag-theme-mode="dark"]) body:not(.dark) [data-testid="settings-sid
 [data-testid="settings-sidebar"] button[data-testid^="settings-nav-item-"]:not([data-testid="settings-nav-item-Account"]):not(.bg-sidebar-secondary),
 [data-testid="settings-sidebar"] button[data-testid^="settings-nav-item-"]:not([data-testid="settings-nav-item-Account"]):not(.bg-sidebar-secondary) span {
   font-family: var(--font-sans) !important;
-  font-size: 14px !important;
+  font-size: var(--ag-ui-font-size, 13px) !important;
   font-weight: 400 !important;
-  line-height: 20px !important;
+  line-height: calc(var(--ag-ui-font-size, 13px) + 6px) !important;
   letter-spacing: 0 !important;
   text-shadow: none !important;
   -webkit-font-smoothing: antialiased !important;
@@ -1406,9 +1428,9 @@ html:not([data-ag-theme-mode="dark"]) body:not(.dark) [data-testid="settings-sid
 [data-testid="settings-sidebar"] button[data-testid^="settings-nav-item-"]:not([data-testid="settings-nav-item-Account"]).bg-sidebar-secondary,
 [data-testid="settings-sidebar"] button[data-testid^="settings-nav-item-"]:not([data-testid="settings-nav-item-Account"]).bg-sidebar-secondary span {
   font-family: var(--font-sans) !important;
-  font-size: 14px !important;
+  font-size: var(--ag-ui-font-size, 13px) !important;
   font-weight: 500 !important;
-  line-height: 20px !important;
+  line-height: calc(var(--ag-ui-font-size, 13px) + 6px) !important;
   letter-spacing: 0 !important;
   text-shadow: none !important;
   -webkit-font-smoothing: antialiased !important;
@@ -1699,11 +1721,18 @@ html:not([data-ag-theme-mode="dark"]) body:not(.dark) :is(#ag-claude-model-popov
   border: none !important;
   border-radius: 9px !important;
   background: transparent !important;
-  font-size: 14px !important;
+  font-size: var(--ag-ui-font-size, 13px) !important;
   font-weight: 400 !important;
   text-align: left !important;
   cursor: pointer !important;
   transition: background-color 110ms ease !important;
+}
+
+button[data-testid="model-selector-trigger"],
+button[data-testid="model-selector-trigger"] span,
+button[data-testid="permissions-selector-trigger"],
+button[data-testid="permissions-selector-trigger"] span {
+  font-size: var(--ag-ui-font-size, 13px) !important;
 }
 
 html:not([data-ag-theme-mode="dark"]) body:not(.dark) .ag-cm-row {
@@ -3027,8 +3056,8 @@ html:not([data-ag-theme-mode="dark"]) body:not(.dark) #ag-claude-recent-section[
 
 #ag-claude-recent-section .ag-recent-title {
   font-family: var(--font-sans) !important;
-  font-size: 14px !important;
-  line-height: 20px !important;
+  font-size: var(--ag-ui-font-size, 13px) !important;
+  line-height: calc(var(--ag-ui-font-size, 13px) + 6px) !important;
   font-weight: 400 !important;
   letter-spacing: 0 !important;
   text-shadow: none !important;
@@ -3059,8 +3088,8 @@ html:not([data-ag-theme-mode="dark"]) body:not(.dark) #ag-claude-recent-section 
 #ag-claude-recent-section .ag-recent-side,
 #ag-claude-recent-section .ag-recent-side span {
   font-family: var(--font-sans) !important;
-  font-size: 12px !important;
-  line-height: 16px !important;
+  font-size: max(10.5px, calc(var(--ag-ui-font-size, 13px) - 1.5px)) !important;
+  line-height: calc(var(--ag-ui-font-size, 13px) + 2.5px) !important;
   font-weight: 400 !important;
   letter-spacing: 0 !important;
   text-shadow: none !important;
@@ -3090,7 +3119,7 @@ html:not([data-ag-theme-mode="dark"]) body:not(.dark) #ag-claude-recent-section 
   overflow: hidden !important;
   text-overflow: ellipsis !important;
   white-space: nowrap !important;
-  font-size: 10.5px !important;
+  font-size: max(10px, calc(var(--ag-ui-font-size, 13px) - 2.5px)) !important;
   line-height: 14px !important;
   padding: 1px 5px !important;
   border-radius: 4px !important;
@@ -3202,7 +3231,7 @@ html:not([data-ag-theme-mode="dark"]) body:not(.dark) #ag-claude-recent-section 
   padding: 0 6px !important;
   border-radius: 5px !important;
   font-family: var(--font-sans) !important;
-  font-size: 13.5px !important;
+  font-size: var(--ag-ui-font-size, 13px) !important;
   line-height: 20px !important;
   outline: none !important;
 }
@@ -3275,7 +3304,7 @@ html:not([data-ag-theme-mode="dark"]) body:not(.dark) :is(#ag-recent-row-menu, #
   align-items: center !important;
   gap: 8px !important;
   font-family: var(--font-sans) !important;
-  font-size: 13px !important;
+  font-size: var(--ag-ui-font-size, 13px) !important;
   line-height: 18px !important;
   text-align: left !important;
   cursor: pointer !important;
@@ -3485,7 +3514,7 @@ html:not([data-ag-theme-mode="dark"]) body:not(.dark) .ag-cux-settings-row + .ag
 
 .ag-cux-settings-title {
   font-family: var(--font-sans) !important;
-  font-size: 14px !important;
+  font-size: var(--ag-ui-font-size, 13px) !important;
   font-weight: 500 !important;
   line-height: 1.4 !important;
   color: var(--foreground, #141413) !important;
@@ -3498,7 +3527,7 @@ html:not([data-ag-theme-mode="dark"]) body:not(.dark) .ag-cux-settings-row + .ag
 
 .ag-cux-settings-desc {
   font-family: var(--font-sans) !important;
-  font-size: 12.5px !important;
+  font-size: max(11px, calc(var(--ag-ui-font-size, 13px) - 1px)) !important;
   font-weight: 400 !important;
   line-height: 1.48 !important;
   margin-top: 2px !important;

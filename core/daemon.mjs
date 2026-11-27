@@ -101,6 +101,8 @@ const ALLOWED_UI_MODULE_KEYS = new Set([
   'claudeUxZhTitleFix'
 ]);
 const VALID_CJK_SCALES = new Set(['94.5', '95', '100']);
+const VALID_UI_FONT_SIZES = new Set(['12', '13', '14', '15', '16']);
+const VALID_CHAT_FONT_SIZES = new Set(['13', '14', '15', '16', '18']);
 const INLINE_TEXT_EXTS = new Set([
   '.md', '.markdown', '.txt', '.json', '.yaml', '.yml', '.toml', '.csv', '.tsv', '.xml',
   '.html', '.htm', '.css', '.js', '.mjs', '.cjs', '.ts', '.tsx', '.jsx', '.py', '.go',
@@ -842,6 +844,10 @@ function sanitizeUiPrefs(raw) {
   }
   const rawScale = String(raw.cjkFontScale ?? '').trim().replace(/%$/, '');
   const cjkFontScale = VALID_CJK_SCALES.has(rawScale) ? rawScale : null;
+  const rawUiSize = String(raw.uiFontSize ?? '').trim().replace(/px$/i, '');
+  const uiFontSize = VALID_UI_FONT_SIZES.has(rawUiSize) ? rawUiSize : null;
+  const rawChatSize = String(raw.chatFontSize ?? '').trim().replace(/px$/i, '');
+  const chatFontSize = VALID_CHAT_FONT_SIZES.has(rawChatSize) ? rawChatSize : null;
   const uiState = {};
   if (raw.uiState && typeof raw.uiState === 'object' && !Array.isArray(raw.uiState)) {
     if (typeof raw.uiState.recentCollapsed === 'boolean') {
@@ -852,7 +858,7 @@ function sanitizeUiPrefs(raw) {
     }
   }
   const updatedAt = Number(raw.updatedAt) > 0 ? Math.floor(Number(raw.updatedAt)) : 0;
-  return { modules, cjkFontScale, uiState, updatedAt };
+  return { modules, cjkFontScale, uiFontSize, chatFontSize, uiState, updatedAt };
 }
 
 function resolveEffectiveUserConfig(userConfigFile, rawCfg) {
@@ -891,6 +897,12 @@ function resolveEffectiveUserConfig(userConfigFile, rawCfg) {
   if (prefs.cjkFontScale && (!manualConfigNewer || !baseObj.cjkFontScale)) {
     out.cjkFontScale = prefs.cjkFontScale;
   }
+  if (prefs.uiFontSize && (!manualConfigNewer || !baseObj.uiFontSize)) {
+    out.uiFontSize = prefs.uiFontSize;
+  }
+  if (prefs.chatFontSize && (!manualConfigNewer || !baseObj.chatFontSize)) {
+    out.chatFontSize = prefs.chatFontSize;
+  }
   return out;
 }
 
@@ -898,12 +910,16 @@ export function saveUiPrefs(payload) {
   const cur = sanitizeUiPrefs(readJsonOrFallback(UI_PREFS_FILE, null)) || {
     modules: {},
     cjkFontScale: null,
+    uiFontSize: null,
+    chatFontSize: null,
     uiState: {},
     updatedAt: 0
   };
   const incoming = sanitizeUiPrefs(payload) || {
     modules: {},
     cjkFontScale: null,
+    uiFontSize: null,
+    chatFontSize: null,
     uiState: {},
     updatedAt: 0
   };
@@ -915,6 +931,12 @@ export function saveUiPrefs(payload) {
     ...(incoming.cjkFontScale || cur.cjkFontScale
       ? { cjkFontScale: incoming.cjkFontScale || cur.cjkFontScale }
       : {}),
+    ...(incoming.uiFontSize || cur.uiFontSize
+      ? { uiFontSize: incoming.uiFontSize || cur.uiFontSize }
+      : {}),
+    ...(incoming.chatFontSize || cur.chatFontSize
+      ? { chatFontSize: incoming.chatFontSize || cur.chatFontSize }
+      : {}),
     uiState: Object.assign({}, cur.uiState, incoming.uiState)
   };
   fs.mkdirSync(STATE_DIR, { recursive: true });
@@ -924,6 +946,8 @@ export function saveUiPrefs(payload) {
     updatedAt,
     modules: next.modules,
     cjkFontScale: next.cjkFontScale || null,
+    uiFontSize: next.uiFontSize || null,
+    chatFontSize: next.chatFontSize || null,
     uiState: next.uiState
   };
 }

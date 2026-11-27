@@ -363,9 +363,11 @@
       if (el) el.remove();
     }
     applyThemeVars({}, {});
-    for (const attr of ['data-ag-theme-mode', 'data-ag-page-type', 'data-ag-os', 'data-ag-ux-lang', 'data-ag-custom-font-size', 'data-ag-cjk-scale']) {
+    for (const attr of ['data-ag-theme-mode', 'data-ag-page-type', 'data-ag-os', 'data-ag-ux-lang', 'data-ag-custom-font-size', 'data-ag-cjk-scale', 'data-ag-ui-font-size', 'data-ag-chat-font-size']) {
       document.documentElement.removeAttribute(attr);
     }
+    document.documentElement.style.removeProperty('--ag-ui-font-size');
+    document.documentElement.style.removeProperty('--ag-chat-font-size');
     if (document.body) restoreAllTranslations(document.body);
     window.__ag_resolved_theme_mode = null;
     return null;

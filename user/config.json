@@ -4,6 +4,8 @@
   "preset": "claude-desktop-purewhite",
   "contextLimit": 256000,
   "cjkFontScale": "95",
+  "uiFontSize": "13",
+  "chatFontSize": "14",
   "modules": {
     "i18n": false,
     "metrics": true,

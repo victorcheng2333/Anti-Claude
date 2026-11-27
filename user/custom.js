@@ -20,9 +20,19 @@
   const cfgUiPrefsTs = Number(CFG_ROOT.uiPrefsUpdatedAt) > 0 ? Number(CFG_ROOT.uiPrefsUpdatedAt) : 0;
   const MODULE_STORAGE_KEY = 'ag_claude_ux_modules_v1';
   const VALID_CJK_SCALES = ['94.5', '95', '100'];
+  const VALID_UI_FONT_SIZES = ['12', '13', '14', '15', '16'];
+  const VALID_CHAT_FONT_SIZES = ['13', '14', '15', '16', '18'];
   function normalizeCjkScale(v) {
     const s = String(v == null ? '' : v).trim().replace(/%$/, '');
     return VALID_CJK_SCALES.includes(s) ? s : null;
+  }
+  function normalizeUiFontSize(v) {
+    const s = String(v == null ? '' : v).trim().replace(/px$/i, '');
+    return VALID_UI_FONT_SIZES.includes(s) ? s : null;
+  }
+  function normalizeChatFontSize(v) {
+    const s = String(v == null ? '' : v).trim().replace(/px$/i, '');
+    return VALID_CHAT_FONT_SIZES.includes(s) ? s : null;
   }
   function loadLocalModuleOverrides() {
     try {
@@ -56,6 +66,14 @@
     normalizeCjkScale(localModOverrides.cjkFontScale) ||
     normalizeCjkScale(CFG_ROOT.cjkFontScale) ||
     '95';
+  let currentUiFontSize =
+    normalizeUiFontSize(localModOverrides.uiFontSize) ||
+    normalizeUiFontSize(CFG_ROOT.uiFontSize) ||
+    '13';
+  let currentChatFontSize =
+    normalizeChatFontSize(localModOverrides.chatFontSize) ||
+    normalizeChatFontSize(CFG_ROOT.chatFontSize) ||
+    '14';
   function effectiveModBool(key, defaultVal = true) {
     if (Object.prototype.hasOwnProperty.call(localModOverrides, key)) {
       return Boolean(localModOverrides[key]);
@@ -98,9 +116,17 @@
   if (docRoot && origDocLang !== 'zh-CN') {
     docRoot.setAttribute('lang', 'zh-CN');
   }
+  function applyFontSizeVars() {
+    if (!docRoot) return;
+    docRoot.setAttribute('data-ag-ui-font-size', currentUiFontSize);
+    docRoot.setAttribute('data-ag-chat-font-size', currentChatFontSize);
+    docRoot.style.setProperty('--ag-ui-font-size', `${currentUiFontSize}px`);
+    docRoot.style.setProperty('--ag-chat-font-size', `${currentChatFontSize}px`);
+  }
   if (docRoot) {
     docRoot.setAttribute('data-ag-ux-lang', FEAT.i18n ? 'zh' : 'en');
     docRoot.setAttribute('data-ag-cjk-scale', currentCjkScale);
+    applyFontSizeVars();
   }
 
   const userToggled = new WeakSet();
@@ -7240,6 +7266,20 @@
     ['95', '95%'],
     ['100', '100%']
   ];
+  const UI_FONT_SIZE_OPTIONS = [
+    ['12', '12px'],
+    ['13', '13px'],
+    ['14', '14px'],
+    ['15', '15px'],
+    ['16', '16px']
+  ];
+  const CHAT_FONT_SIZE_OPTIONS = [
+    ['13', '13px'],
+    ['14', '14px'],
+    ['15', '15px'],
+    ['16', '16px'],
+    ['18', '18px']
+  ];
 
   const SETTINGS_GROUPS = [
     {
@@ -7431,6 +7471,48 @@
                   ? `
                 <div class="ag-cux-settings-row">
                   <div style="min-width:0">
+                    <div class="ag-cux-settings-title">${escapeHtml(L('界面字体大小', 'UI Font Size'))}</div>
+                    <div class="ag-cux-settings-desc">${escapeHtml(
+                      L(
+                        '独立调节左侧边栏对话标题、导航、菜单与设置界面的字号，不影响对话正文（默认 13px）',
+                        'Adjust sidebar chat titles, navigation, menus, and settings typography independently from chat prose (default 13px)'
+                      )
+                    )}</div>
+                  </div>
+                  <div class="ag-cux-seg-group" role="radiogroup" aria-label="${escapeHtml(
+                    L('界面字体大小', 'UI Font Size')
+                  )}">
+                    ${UI_FONT_SIZE_OPTIONS.map(
+                      ([val, label]) =>
+                        `<button type="button" class="ag-cux-seg-btn" role="radio" data-ag-cux-ui-font="${val}" aria-checked="${
+                          currentUiFontSize === val
+                        }">${label}</button>`
+                    ).join('')}
+                  </div>
+                </div>
+                <div class="ag-cux-settings-row">
+                  <div style="min-width:0">
+                    <div class="ag-cux-settings-title">${escapeHtml(L('对话正文字体大小', 'Chat Font Size'))}</div>
+                    <div class="ag-cux-settings-desc">${escapeHtml(
+                      L(
+                        '独立调节 AI 回复正文、用户气泡、输入框与代码块字号，不影响侧栏界面（默认 14px）',
+                        'Adjust AI responses, user message bubbles, composer input, and code blocks independently from sidebar UI (default 14px)'
+                      )
+                    )}</div>
+                  </div>
+                  <div class="ag-cux-seg-group" role="radiogroup" aria-label="${escapeHtml(
+                    L('对话正文字体大小', 'Chat Font Size')
+                  )}">
+                    ${CHAT_FONT_SIZE_OPTIONS.map(
+                      ([val, label]) =>
+                        `<button type="button" class="ag-cux-seg-btn" role="radio" data-ag-cux-chat-font="${val}" aria-checked="${
+                          currentChatFontSize === val
+                        }">${label}</button>`
+                    ).join('')}
+                  </div>
+                </div>
+                <div class="ag-cux-settings-row">
+                  <div style="min-width:0">
                     <div class="ag-cux-settings-title">${escapeHtml(L('中文字体字高校准', 'CJK Optical Font Scale'))}</div>
                     <div class="ag-cux-settings-desc">${escapeHtml(
                       L(
@@ -7476,6 +7558,16 @@
         const modKey = sw.getAttribute('data-ag-cux-switch');
         const featKey = sw.getAttribute('data-ag-cux-feat');
         setModuleOverride(modKey, featKey, !FEAT[featKey]);
+      });
+    });
+    panel.querySelectorAll('[data-ag-cux-ui-font]').forEach((btn) => {
+      btn.addEventListener('click', () => {
+        setUiFontSizeOverride(btn.getAttribute('data-ag-cux-ui-font'));
+      });
+    });
+    panel.querySelectorAll('[data-ag-cux-chat-font]').forEach((btn) => {
+      btn.addEventListener('click', () => {
+        setChatFontSizeOverride(btn.getAttribute('data-ag-cux-chat-font'));
       });
     });
     panel.querySelectorAll('[data-ag-cux-cjk-scale]').forEach((btn) => {
@@ -7590,6 +7682,8 @@
       updatedAt,
       modules: modulesPayload,
       cjkFontScale: currentCjkScale,
+      uiFontSize: currentUiFontSize,
+      chatFontSize: currentChatFontSize,
       uiState: {
         recentCollapsed: Boolean(recentCollapsed),
         unifiedRecentCollapsed: Boolean(unifiedRecentCollapsed)
@@ -7609,6 +7703,28 @@
         }
       })
       .catch(() => {});
+  }
+
+  function setUiFontSizeOverride(rawSize) {
+    const next = normalizeUiFontSize(rawSize);
+    if (!next) return;
+    currentUiFontSize = next;
+    localModOverrides.uiFontSize = next;
+    applyFontSizeVars();
+    persistUiPrefsToDaemon();
+    syncSettingsSwitchesUi();
+    flashSettingsSavedToast();
+  }
+
+  function setChatFontSizeOverride(rawSize) {
+    const next = normalizeChatFontSize(rawSize);
+    if (!next) return;
+    currentChatFontSize = next;
+    localModOverrides.chatFontSize = next;
+    applyFontSizeVars();
+    persistUiPrefsToDaemon();
+    syncSettingsSwitchesUi();
+    flashSettingsSavedToast();
   }
 
   function setCjkScaleOverride(rawScale) {
@@ -7641,6 +7757,12 @@
         if (sw) sw.setAttribute('aria-checked', String(Boolean(FEAT[featKey])));
       }
     }
+    settingsPanelEl.querySelectorAll('[data-ag-cux-ui-font]').forEach((btn) => {
+      btn.setAttribute('aria-checked', String(btn.getAttribute('data-ag-cux-ui-font') === currentUiFontSize));
+    });
+    settingsPanelEl.querySelectorAll('[data-ag-cux-chat-font]').forEach((btn) => {
+      btn.setAttribute('aria-checked', String(btn.getAttribute('data-ag-cux-chat-font') === currentChatFontSize));
+    });
     settingsPanelEl.querySelectorAll('[data-ag-cux-cjk-scale]').forEach((btn) => {
       btn.setAttribute('aria-checked', String(btn.getAttribute('data-ag-cux-cjk-scale') === currentCjkScale));
     });
@@ -14646,6 +14768,10 @@
     if (docRoot) {
       docRoot.removeAttribute('data-ag-ux-lang');
       docRoot.removeAttribute('data-ag-cjk-scale');
+      docRoot.removeAttribute('data-ag-ui-font-size');
+      docRoot.removeAttribute('data-ag-chat-font-size');
+      docRoot.style.removeProperty('--ag-ui-font-size');
+      docRoot.style.removeProperty('--ag-chat-font-size');
     }
     if (window.__agClaudeUxDispose === dispose) window.__agClaudeUxDispose = null;
   }
