@@ -407,7 +407,7 @@ div[contenteditable="true"] :is(p, span, div, li),
 /* Code blocks & inline code: preserve exact monospace metrics without CJK autospace injection */
 :is([data-testid="planner-response-text"], [data-markdown-root], [data-testid="user-message-content"], .agy-user-bubble, .select-text, .prose, .markdown, article) :is(code, pre, pre *, kbd, samp, .font-mono, [class*="language-"]) {
   font-family: var(--font-mono) !important;
-  font-size: calc(var(--ag-chat-font-size, 14px) - 1.2px) !important;
+  font-size: calc(var(--ag-chat-font-size, 14px) - 1.5px) !important;
   text-autospace: no-autospace !important;
   text-spacing-trim: space-all !important;
 }
@@ -1061,21 +1061,75 @@ html:not([data-ag-theme-mode="dark"]) body:not(.dark) #antigravity\.agentSidePan
   padding: 6px 12px !important;
 }
 
-/* 3.5 Clean neutral inline code & file mention pills (compact 1.5px outer breathing room) */
-:is([data-testid="planner-response-text"], [data-markdown-root], .select-text, .prose, .markdown) :is(:not(pre) > code, bdi.context-scope-mention) {
+/* 3.5 Clean neutral inline code & file mention pills */
+:is([data-testid="planner-response-text"], [data-markdown-root], .select-text, .prose, .markdown) bdi.context-scope-mention {
   margin-inline: 1.5px;
 }
 
-:is([data-testid="planner-response-text"], [data-markdown-root], .select-text, .prose, .markdown) :is(:not(pre) > code, bdi.context-scope-mention):first-child {
+:is([data-testid="planner-response-text"], [data-markdown-root], .select-text, .prose, .markdown) bdi.context-scope-mention:first-child {
   margin-inline-start: 0;
 }
 
+/* Inline code: fill-only chip (no border) at ~0.86em so monospace does not look larger than CJK body text.
+   No outer margin: the browser's text-autospace already inserts the CJK/Latin gap, extra margin made
+   "（ `code`" look double-spaced. box-decoration-break: clone keeps both halves of a wrapped chip fully
+   rounded and padded instead of leaving open-ended slices; word-break: normal only splits a token when it
+   cannot fit on a line by itself. */
+:is([data-testid="planner-response-text"], [data-markdown-root], .select-text, .prose, .markdown) :not(pre) > code {
+  margin-inline: 0 !important;
+  border: none !important;
+  border-radius: 4px !important;
+  padding: 0.12em 0.32em !important;
+  -webkit-box-decoration-break: clone !important;
+  box-decoration-break: clone !important;
+  word-break: normal !important;
+  overflow-wrap: break-word !important;
+}
+
+/* font-size lives in the theme-scoped rules: they outrank the shared monospace rule (§ Code blocks & inline
+   code, chat size - 1.2px) which must keep applying to fenced code blocks. */
 html:not([data-ag-theme-mode="dark"]) body:not(.dark) :is([data-testid="planner-response-text"], [data-markdown-root], .select-text, .prose, .markdown) :not(pre) > code {
-  background-color: #F3F3F1 !important;
-  border: 1px solid rgba(0, 0, 0, 0.06) !important;
-  border-radius: 5px;
-  padding: 0.08em 0.34em;
-  color: #1F1E1D !important;
+  font-size: calc(var(--ag-chat-font-size, 14px) * 0.88) !important;
+  background-color: #EFEEEA !important;
+  color: #2B2A27 !important;
+}
+
+:is(html[data-ag-theme-mode="dark"] body, body.dark) :is([data-testid="planner-response-text"], [data-markdown-root], .select-text, .prose, .markdown) :not(pre) > code {
+  font-size: calc(var(--ag-chat-font-size, 14px) * 0.88) !important;
+  background-color: rgba(255, 255, 255, 0.08) !important;
+  color: #E6E4DE !important;
+}
+
+/* Blockquote: native bar is a 4px fully-rounded stripe at 7.5% black (heavy shape, nearly invisible tone)
+   and quote text is identical to body text. Use a slimmer, readable bar and a secondary text tone. */
+:is([data-testid="planner-response-text"], [data-markdown-root], .prose, .markdown) blockquote {
+  padding-inline-start: 14px !important;
+}
+
+:is([data-testid="planner-response-text"], [data-markdown-root], .prose, .markdown) blockquote :is(p, li) {
+  font-size: calc(var(--ag-chat-font-size, 14px) - 1px) !important;
+  line-height: 1.7 !important;
+}
+
+:is([data-testid="planner-response-text"], [data-markdown-root], .prose, .markdown) blockquote::before {
+  width: 3px !important;
+  border-radius: 2px !important;
+}
+
+html:not([data-ag-theme-mode="dark"]) body:not(.dark) :is([data-testid="planner-response-text"], [data-markdown-root], .prose, .markdown) blockquote::before {
+  background-color: #D6D4CD !important;
+}
+
+html:not([data-ag-theme-mode="dark"]) body:not(.dark) :is([data-testid="planner-response-text"], [data-markdown-root], .prose, .markdown) blockquote :is(p, li, strong, b, em) {
+  color: #5E5D59 !important;
+}
+
+:is(html[data-ag-theme-mode="dark"] body, body.dark) :is([data-testid="planner-response-text"], [data-markdown-root], .prose, .markdown) blockquote::before {
+  background-color: #4A4945 !important;
+}
+
+:is(html[data-ag-theme-mode="dark"] body, body.dark) :is([data-testid="planner-response-text"], [data-markdown-root], .prose, .markdown) blockquote :is(p, li, strong, b, em) {
+  color: #B5B3AD !important;
 }
 
 /* 3.6 Underlined slate links */
@@ -3034,10 +3088,7 @@ html:not([data-ag-theme-mode="dark"]) body:not(.dark) #ag-claude-recent-section 
 }
 
 #ag-claude-recent-section .ag-recent-chevron {
-  display: inline-block !important;
-  font-size: 11px !important;
-  transition: transform 140ms ease, opacity 140ms ease !important;
-  opacity: 0.7 !important;
+  display: none !important;
 }
 
 #ag-claude-recent-section .ag-recent-hdr[aria-expanded="false"] .ag-recent-chevron {
