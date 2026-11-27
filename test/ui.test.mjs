@@ -1153,7 +1153,7 @@ test('projects workspace: 3-level Claude Projects flow (grid -> detail page with
       <div data-testid="project-header" data-project-label="Quotation">Quotation</div>
     </div>
   `;
-  const h = mount(html);
+  const h = mount(html, { modules: { claudeUxHideSidebarProjects: true } }); /* unified Recents is opt-in since c74cee4 */
   const navigated = [];
   const storeState = {
     userStatus: {
@@ -1410,7 +1410,9 @@ test('projects workspace: 3-level Claude Projects flow (grid -> detail page with
   pdModelBtn.dispatchEvent(new h.window.Event('pointerdown', { bubbles: true }));
   const modelPop = h.doc.getElementById('ag-claude-model-popover');
   assert.equal(modelPop && modelPop.getAttribute('data-open'), 'true', 'clicking project model button opens real Claude model popover purely via Redux fallback');
-  modelPop.querySelector('[data-ag-cm-family="Gemini 4 Argon"]').click();
+  /* Gemini 4 Argon is not in the curated primary list (bc105d1), so it is picked from More models */
+  modelPop.querySelector('[data-ag-cm-subtrigger="more"]').click();
+  h.doc.getElementById('ag-claude-model-subpop').querySelector('[data-ag-cm-more-family="Gemini 4 Argon"]').click();
   assert.ok(
     dispatched.some((a) => a && a.type === 'modelSelection/modelPicked' && a.payload && a.payload.model === 1417),
     'selecting a model from project composer dispatches modelSelection/modelPicked'
@@ -1472,7 +1474,7 @@ test('unified sidebar Recents: mixes project & standalone chats without 8-item c
       </div>
     </div>
   `;
-  const h = mount(html);
+  const h = mount(html, { modules: { claudeUxHideSidebarProjects: true } }); /* unified Recents is opt-in since c74cee4 */
   const nowSec = Math.floor(Date.now() / 1000);
   const summaries = {};
   for (let i = 1; i <= 10; i++) {
