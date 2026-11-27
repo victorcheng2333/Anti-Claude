@@ -3537,6 +3537,46 @@ html:not([data-ag-theme-mode="dark"]) body:not(.dark) .ag-cux-seg-group {
   border: 1px solid rgba(255, 255, 255, 0.08) !important;
 }
 
+.ag-cux-action-btn {
+  appearance: none !important;
+  flex-shrink: 0 !important;
+  padding: 5px 12px !important;
+  min-height: 30px !important;
+  border-radius: 8px !important;
+  font-family: var(--font-sans) !important;
+  font-size: 12.5px !important;
+  font-weight: 500 !important;
+  line-height: 18px !important;
+  cursor: pointer !important;
+  white-space: nowrap !important;
+  transition: background-color 120ms ease, border-color 120ms ease, opacity 120ms ease !important;
+}
+
+html:not([data-ag-theme-mode="dark"]) body:not(.dark) .ag-cux-action-btn {
+  background-color: #F4F3F0 !important;
+  border: 1px solid rgba(31, 30, 29, 0.12) !important;
+  color: #191918 !important;
+}
+
+html:not([data-ag-theme-mode="dark"]) body:not(.dark) .ag-cux-action-btn:hover:not(:disabled) {
+  background-color: #EAE8E3 !important;
+}
+
+:is(html[data-ag-theme-mode="dark"] body, body.dark) .ag-cux-action-btn {
+  background-color: #252523 !important;
+  border: 1px solid rgba(255, 255, 255, 0.12) !important;
+  color: #ECECEA !important;
+}
+
+:is(html[data-ag-theme-mode="dark"] body, body.dark) .ag-cux-action-btn:hover:not(:disabled) {
+  background-color: #2F2F2C !important;
+}
+
+.ag-cux-action-btn:disabled {
+  opacity: 0.6 !important;
+  cursor: default !important;
+}
+
 .ag-cux-seg-btn {
   appearance: none !important;
   border: none !important;

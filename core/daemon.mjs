@@ -49,6 +49,7 @@ const USER_DIR = path.resolve(
 );
 const PID_FILE = path.join(STATE_DIR, 'daemon.pid');
 const UI_PREFS_FILE = path.join(STATE_DIR, 'ui-prefs.json');
+const TITLE_FIX_STATE_FILE = path.join(STATE_DIR, 'title-fix-state.json');
 const BASE_CONFIG_FILE = path.join(STATE_DIR, 'base', 'config.json');
 const CORE_BASE_CSS_FILE = path.join(__dirname, 'base.css');
 const CORE_I18N_FILE = path.join(__dirname, 'i18n.json');
@@ -96,7 +97,8 @@ const ALLOWED_UI_MODULE_KEYS = new Set([
   'claudeUxHideSidebarProjects',
   'claudeUxCustomizations',
   'claudeUxCodeFold',
-  'claudeUxOverviewPanel'
+  'claudeUxOverviewPanel',
+  'claudeUxZhTitleFix'
 ]);
 const VALID_CJK_SCALES = new Set(['94.5', '95', '100']);
 const INLINE_TEXT_EXTS = new Set([
@@ -3140,6 +3142,416 @@ function getSafePluginDocRoots(configDir = path.join(HOME, '.gemini', 'config'))
   return roots;
 }
 
+const HAN_CHAR_RE = /[\u4e00-\u9fff\u3400-\u4dbf]/u;
+const TITLE_FIX_PLACEHOLDERS = new Set(['new conversation', 'untitled conversation']);
+const MAX_TITLE_FIX_CONCURRENCY = 2;
+const titleFixInFlight = new Map();
+const titleFixQueue = [];
+let titleFixActive = 0;
+
+export function hasHanChars(text) {
+  return HAN_CHAR_RE.test(String(text || ''));
+}
+
+export function looksLikeEnglishTitle(title) {
+  const t = String(title || '').trim();
+  if (!t || t.length < 3) return false;
+  if (TITLE_FIX_PLACEHOLDERS.has(t.toLowerCase())) return false;
+  if (UUID_RE.test(t)) return false;
+  if (/^(?:https?:\/\/|\/|~\/|\.)/i.test(t)) return false;
+  if (hasHanChars(t)) return false;
+  return /[A-Za-z]{2,}/.test(t);
+}
+
+export function extractFirstUserPromptText(rawContent) {
+  let s = String(rawContent || '');
+  const reqMatch = s.match(/<USER_REQUEST>([\s\S]*?)<\/USER_REQUEST>/i);
+  if (reqMatch) {
+    s = reqMatch[1];
+  } else {
+    s = s
+      .replace(/<ADDITIONAL_METADATA>[\s\S]*$/i, '')
+      .replace(/<USER_SETTINGS_CHANGE>[\s\S]*$/i, '')
+      .replace(/<\/?[A-Za-z_][A-Za-z0-9_:-]*>/g, ' ');
+  }
+  return s.replace(/\s+/g, ' ').trim().slice(0, 300);
+}
+
+export function readConversationFirstUserPrompt(cascadeId, conversationsDir) {
+  const cid = String(cascadeId || '').trim();
+  if (!UUID_RE.test(cid) || !conversationsDir) return null;
+  const brainRoot = path.join(path.dirname(conversationsDir), 'brain', cid);
+  const transcriptPath = path.join(brainRoot, '.system_generated', 'logs', 'transcript.jsonl');
+  let fd = null;
+  try {
+    fd = fs.openSync(transcriptPath, 'r');
+    const buf = Buffer.alloc(32 * 1024);
+    const bytesRead = fs.readSync(fd, buf, 0, buf.length, 0);
+    if (!bytesRead) return null;
+    const text = buf.subarray(0, bytesRead).toString('utf8');
+    const lines = text.split('\n');
+    let fallbackContent = '';
+    for (let i = 0; i < Math.min(lines.length, 25); i++) {
+      const line = lines[i].trim();
+      if (!line) continue;
+      let obj = null;
+      try {
+        obj = JSON.parse(line);
+      } catch {
+        continue;
+      }
+      if (!obj || typeof obj !== 'object') continue;
+      const content = typeof obj.content === 'string' ? obj.content : '';
+      if (!content) continue;
+      if (i === 0) fallbackContent = content;
+      if (obj.type === 'USER_INPUT' || obj.source === 'USER_EXPLICIT') {
+        const prompt = extractFirstUserPromptText(content);
+        return prompt ? { prompt, hasChinese: hasHanChars(prompt) } : null;
+      }
+    }
+    if (fallbackContent) {
+      const prompt = extractFirstUserPromptText(fallbackContent);
+      return prompt ? { prompt, hasChinese: hasHanChars(prompt) } : null;
+    }
+    return null;
+  } catch {
+    return null;
+  } finally {
+    if (fd !== null) {
+      try {
+        fs.closeSync(fd);
+      } catch {}
+    }
+  }
+}
+
+export function resolveAgyBinaryPath() {
+  const binName = process.platform === 'win32' ? 'agy.exe' : 'agy';
+  const candidates = [];
+  const envBin = String(process.env.ANTI_CLAUDE_AGY_BIN || '').trim();
+  if (envBin) candidates.push(envBin);
+  candidates.push(
+    path.join(HOME, '.local', 'bin', binName),
+    path.join(HOME, '.gemini', 'bin', binName),
+    '/opt/homebrew/bin/agy',
+    '/usr/local/bin/agy'
+  );
+  const pathDirs = String(process.env.PATH || '').split(path.delimiter).filter(Boolean);
+  for (const dir of pathDirs) {
+    candidates.push(path.join(dir, binName));
+  }
+  const seen = new Set();
+  for (const raw of candidates) {
+    const p = path.resolve(raw);
+    if (seen.has(p)) continue;
+    seen.add(p);
+    try {
+      const st = fs.statSync(p, { throwIfNoEntry: false });
+      if (!st || !st.isFile()) continue;
+      if (process.platform !== 'win32') {
+        fs.accessSync(p, fs.constants.X_OK);
+      }
+      return p;
+    } catch {}
+  }
+  return null;
+}
+
+export function buildZhTitlePrompt(englishTitle, firstUserPrompt) {
+  const cleanTitle = String(englishTitle || '').replace(/\s+/g, ' ').trim().slice(0, 120);
+  const cleanPrompt = String(firstUserPrompt || '').replace(/\s+/g, ' ').trim().slice(0, 300);
+  const lines = [
+    '请将下面的对话标题改写为简洁自然的简体中文标题（6–18 个汉字，最多不超过 28 个字符）。',
+    '保留专有名词与常见技术缩写（如 Antigravity、Agy、Cindy、Anti-Claude、Harness、Orchestrator、API、MCP、Git、CLI 等）的英文原词。',
+    '只输出最终标题本身，单行纯文本，不要加引号、书名号、前缀或句末标点。',
+    '',
+    `<english_title>${cleanTitle}</english_title>`
+  ];
+  if (cleanPrompt) {
+    lines.push(`<user_message>${cleanPrompt}</user_message>`);
+  }
+  return lines.join('\n');
+}
+
+export function sanitizeGeneratedZhTitle(raw) {
+  if (typeof raw !== 'string') return null;
+  let text = raw.trim();
+  if (!text) return null;
+  text = text.replace(/^```[^\n]*\n?/u, '').replace(/\n?```$/u, '').trim();
+  const firstLine = text.split(/\r?\n/u).map((l) => l.trim()).find(Boolean) || '';
+  if (!firstLine) return null;
+  let title = firstLine
+    .replace(/^#{1,6}\s+/u, '')
+    .replace(/^(?:标题|中文标题|Title)\s*[:：]\s*/iu, '')
+    .trim();
+  const pairs = [
+    ['"', '"'],
+    ["'", "'"],
+    ['「', '」'],
+    ['『', '』'],
+    ['“', '”'],
+    ['‘', '’'],
+    ['《', '》']
+  ];
+  for (const [open, close] of pairs) {
+    if (title.startsWith(open) && title.endsWith(close) && title.length >= open.length + close.length) {
+      title = title.slice(open.length, -close.length).trim();
+    }
+  }
+  title = title
+    .replace(/[\s。．.!！?？;；:：,，、~～]+$/u, '')
+    .replace(/[\t\f\v ]+/gu, ' ')
+    .trim();
+  if (!title || !hasHanChars(title)) return null;
+  if (/^(?:请)?(?:为.*)?生成.*(?:简体)?中文.*标题$/u.test(title)) return null;
+  const chars = Array.from(title);
+  if (chars.length > 32) {
+    title = chars.slice(0, 32).join('').trim();
+  }
+  return hasHanChars(title) ? title : null;
+}
+
+export async function generateZhTitleWithAgy({
+  englishTitle,
+  firstUserPrompt = '',
+  agyBin = resolveAgyBinaryPath(),
+  timeoutMs = 25000
+} = {}) {
+  if (!agyBin) return { ok: false, error: 'agy_not_found' };
+  const prompt = buildZhTitlePrompt(englishTitle, firstUserPrompt);
+  const isoDir = fs.mkdtempSync(path.join(os.tmpdir(), 'anti-claude-title-'));
+  try {
+    const args = [
+      `--gemini_dir=${isoDir}`,
+      '--model',
+      'gemini-3.8-flash-low',
+      '--output-format',
+      'json',
+      '--disable-slash-commands',
+      '--print-timeout',
+      '20s',
+      '--print',
+      prompt
+    ];
+    const { stdout } = await new Promise((resolve, reject) => {
+      execFile(
+        agyBin,
+        args,
+        {
+          cwd: isoDir,
+          env: {
+            ...process.env,
+            AGY_CLI_DISABLE_AUTO_UPDATE: 'true',
+            NO_COLOR: '1'
+          },
+          timeout: timeoutMs,
+          maxBuffer: 512 * 1024
+        },
+        (err, out, stderr) => {
+          if (err) {
+            err.stdout = out;
+            err.stderr = stderr;
+            reject(err);
+            return;
+          }
+          resolve({ stdout: String(out || ''), stderr: String(stderr || '') });
+        }
+      );
+    });
+    const trimmed = String(stdout || '').trim();
+    let parsed = null;
+    try {
+      parsed = JSON.parse(trimmed);
+    } catch {
+      const lines = trimmed.split(/\r?\n/).reverse();
+      for (const line of lines) {
+        const t = line.trim();
+        if (t.startsWith('{') && t.endsWith('}')) {
+          try {
+            parsed = JSON.parse(t);
+            break;
+          } catch {}
+        }
+      }
+    }
+    if (!parsed || parsed.status !== 'SUCCESS') {
+      return { ok: false, error: 'agy_failed' };
+    }
+    const title = sanitizeGeneratedZhTitle(parsed.response);
+    if (!title) return { ok: false, error: 'invalid_title_output' };
+    return { ok: true, title };
+  } catch (err) {
+    if (err && (err.killed || err.signal === 'SIGTERM' || err.code === 'ETIMEDOUT')) {
+      return { ok: false, error: 'agy_timeout' };
+    }
+    return { ok: false, error: 'agy_exec_failed' };
+  } finally {
+    try {
+      fs.rmSync(isoDir, { recursive: true, force: true });
+    } catch {}
+  }
+}
+
+function loadTitleFixLedger() {
+  const raw = readJsonOrFallback(TITLE_FIX_STATE_FILE, null);
+  if (!raw || typeof raw !== 'object' || !raw.items || typeof raw.items !== 'object' || Array.isArray(raw.items)) {
+    return { schema: 1, items: {} };
+  }
+  return { schema: 1, items: { ...raw.items } };
+}
+
+function saveTitleFixLedger(ledger) {
+  const items = ledger && ledger.items && typeof ledger.items === 'object' ? ledger.items : {};
+  const entries = Object.entries(items);
+  if (entries.length > 1000) {
+    entries.sort((a, b) => Number(b[1]?.updatedAt || 0) - Number(a[1]?.updatedAt || 0));
+    ledger = { schema: 1, items: Object.fromEntries(entries.slice(0, 1000)) };
+  }
+  fs.mkdirSync(STATE_DIR, { recursive: true });
+  writeAtomicUtf8(TITLE_FIX_STATE_FILE, `${JSON.stringify(ledger, null, 2)}\n`);
+}
+
+function setTitleFixLedgerEntry(conversationId, entry) {
+  const ledger = loadTitleFixLedger();
+  ledger.items[conversationId] = entry;
+  saveTitleFixLedger(ledger);
+}
+
+function runWithTitleFixQueue(fn) {
+  return new Promise((resolve, reject) => {
+    const start = () => {
+      titleFixActive += 1;
+      Promise.resolve()
+        .then(fn)
+        .then(resolve, reject)
+        .finally(() => {
+          titleFixActive = Math.max(0, titleFixActive - 1);
+          if (titleFixQueue.length > 0) {
+            const next = titleFixQueue.shift();
+            next();
+          }
+        });
+    };
+    if (titleFixActive < MAX_TITLE_FIX_CONCURRENCY) {
+      start();
+    } else {
+      titleFixQueue.push(start);
+    }
+  });
+}
+
+async function handleFixConversationTitleRpc(payload, conversationsDir) {
+  const cid = String(payload?.conversationId || '').trim();
+  if (!UUID_RE.test(cid)) return { ok: false, error: 'invalid_conversation_id' };
+  const currentTitle = String(payload?.currentTitle || '').trim();
+  if (!currentTitle) return { ok: false, error: 'missing_title' };
+  const force = Boolean(payload?.force);
+
+  if (!force) {
+    if (!looksLikeEnglishTitle(currentTitle)) {
+      return { ok: true, status: 'skip_not_english' };
+    }
+    const ledger = loadTitleFixLedger();
+    const prev = ledger.items[cid];
+    if (prev) {
+      if (prev.status === 'user_renamed' || prev.status === 'skipped_non_zh') {
+        return { ok: true, status: 'cached_skip' };
+      }
+      if (prev.status === 'fixed' && prev.sourceTitle === currentTitle) {
+        return { ok: true, status: 'cached_skip' };
+      }
+      if (prev.status === 'failed' && Date.now() - Number(prev.updatedAt || 0) < 600_000) {
+        return { ok: true, status: 'cached_skip' };
+      }
+    }
+  }
+
+  const promptInfo = readConversationFirstUserPrompt(cid, conversationsDir);
+  if (!force && (!promptInfo || !promptInfo.hasChinese)) {
+    setTitleFixLedgerEntry(cid, {
+      sourceTitle: currentTitle,
+      status: 'skipped_non_zh',
+      updatedAt: Date.now()
+    });
+    return { ok: true, status: 'skip_non_zh_prompt' };
+  }
+
+  const existing = titleFixInFlight.get(cid);
+  if (existing) return existing;
+
+  const task = runWithTitleFixQueue(async () => {
+    const res = await generateZhTitleWithAgy({
+      englishTitle: currentTitle,
+      firstUserPrompt: promptInfo?.prompt || ''
+    });
+    if (res.ok) {
+      setTitleFixLedgerEntry(cid, {
+        sourceTitle: currentTitle,
+        zhTitle: res.title,
+        status: 'fixed',
+        updatedAt: Date.now()
+      });
+      return {
+        ok: true,
+        status: 'fixed',
+        conversationId: cid,
+        title: res.title,
+        sourceTitle: currentTitle
+      };
+    }
+    if (res.error !== 'agy_not_found') {
+      setTitleFixLedgerEntry(cid, {
+        sourceTitle: currentTitle,
+        status: 'failed',
+        error: res.error,
+        updatedAt: Date.now()
+      });
+    }
+    return { ok: false, error: res.error, conversationId: cid };
+  }).finally(() => {
+    if (titleFixInFlight.get(cid) === task) {
+      titleFixInFlight.delete(cid);
+    }
+  });
+
+  titleFixInFlight.set(cid, task);
+  return task;
+}
+
+function handleScanEnglishTitlesRpc(payload, conversationsDir) {
+  const limitRaw = Number(payload?.limit);
+  const limit = Number.isFinite(limitRaw) ? Math.max(1, Math.min(200, Math.floor(limitRaw))) : 60;
+  const agyAvailable = Boolean(resolveAgyBinaryPath());
+  const sumDbPath = path.join(path.dirname(conversationsDir), 'conversation_summaries.db');
+  if (!DatabaseSync || !fs.existsSync(sumDbPath)) {
+    return { ok: true, agyAvailable, candidates: [] };
+  }
+  const ledger = loadTitleFixLedger();
+  const rows = withReadOnlyDb(sumDbPath, 60, (db) =>
+    db
+      .prepare(
+        "SELECT conversation_id, title, last_modified_time FROM conversation_summaries WHERE title != '' AND (app_data_dir = '' OR app_data_dir = 'antigravity') ORDER BY last_modified_time DESC LIMIT ?"
+      )
+      .all(limit)
+  );
+  const candidates = [];
+  for (const row of rows || []) {
+    const cid = String(row.conversation_id || '').trim();
+    const title = String(row.title || '').trim();
+    if (!UUID_RE.test(cid) || !looksLikeEnglishTitle(title)) continue;
+    const prev = ledger.items[cid];
+    if (prev && prev.status === 'user_renamed') continue;
+    const promptInfo = readConversationFirstUserPrompt(cid, conversationsDir);
+    if (!promptInfo || !promptInfo.hasChinese) continue;
+    candidates.push({
+      conversationId: cid,
+      title,
+      lastModifiedTime: String(row.last_modified_time || '')
+    });
+  }
+  return { ok: true, agyAvailable, candidates };
+}
+
 async function handleProjectRpcRequest(rawPayload, callerEntry = null) {
   let req;
   try {
@@ -3257,6 +3669,25 @@ async function handleProjectRpcRequest(rawPayload, callerEntry = null) {
         return { reqId, result: { ok: false, error: 'path_outside_project' } };
       }
       return { reqId, result: revealLocalPath(absTarget, { openFolderContents: Boolean(payload?.openFolder) }) };
+    }
+    if (action === 'fixConversationTitle') {
+      const convDir = callerEntry?.endpoint?.conversationsDir || path.join(HOME, '.gemini', 'antigravity', 'conversations');
+      const res = await handleFixConversationTitleRpc(payload, convDir);
+      return { reqId, result: res };
+    }
+    if (action === 'markTitleUserRenamed') {
+      const cid = String(payload?.conversationId || '').trim();
+      if (!UUID_RE.test(cid)) return { reqId, result: { ok: false, error: 'invalid_conversation_id' } };
+      setTitleFixLedgerEntry(cid, {
+        sourceTitle: String(payload?.title || '').trim(),
+        status: 'user_renamed',
+        updatedAt: Date.now()
+      });
+      return { reqId, result: { ok: true } };
+    }
+    if (action === 'scanEnglishTitles') {
+      const convDir = callerEntry?.endpoint?.conversationsDir || path.join(HOME, '.gemini', 'antigravity', 'conversations');
+      return { reqId, result: handleScanEnglishTitlesRpc(payload, convDir) };
     }
     return { reqId, result: { ok: false, error: `unknown_action:${action}` } };
   } catch (err) {

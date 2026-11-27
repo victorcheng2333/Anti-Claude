@@ -79,7 +79,8 @@
     hideSidebarProjects: effectiveModBool('claudeUxHideSidebarProjects', false),
     customizations: effectiveModBool('claudeUxCustomizations', true),
     codeFold: effectiveModBool('claudeUxCodeFold', true),
-    overviewPanel: effectiveModBool('claudeUxOverviewPanel', true)
+    overviewPanel: effectiveModBool('claudeUxOverviewPanel', true),
+    zhTitleFix: effectiveModBool('claudeUxZhTitleFix', true)
   };
   const L = (zh, en) => (FEAT.i18n ? zh : en);
 
@@ -3696,7 +3697,6 @@
           ? `<button type="button" class="ag-cm-row" data-ag-cm-hover="executor" data-ag-cm-subtrigger="executor"${execSubActive}>
         <span class="ag-cm-exec-label">
           <span>${L('执行模型', 'Executor model')}</span>
-          ${!mainExecCat.isDefault ? '<span class="ag-cm-dot"></span>' : ''}
         </span>
         <span class="ag-cm-right ag-cm-exec-summary">
           <span>${escapeHtml(mainExecCat.shortSummary)}</span>
@@ -3791,7 +3791,6 @@
             }>
               <span class="ag-cm-exec-label">
                 <span>${L('执行模型', 'Executor model')}</span>
-                ${!execCat.isDefault ? '<span class="ag-cm-dot"></span>' : ''}
               </span>
               <span class="ag-cm-right ag-cm-exec-summary">
                 <span>${escapeHtml(execCat.shortSummary)}</span>
@@ -4754,6 +4753,8 @@
     '<svg viewBox="0 0 16 16" width="13" height="13" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M2.2 4.4A1.2 1.2 0 0 1 3.4 3.2h3.1l1.2 1.3h4.9a1.2 1.2 0 0 1 1.2 1.2v6.1a1.2 1.2 0 0 1-1.2 1.2H3.4a1.2 1.2 0 0 1-1.2-1.2V4.4z"/></svg>';
   const RECENT_RENAME_SVG =
     '<svg viewBox="0 0 16 16" width="13" height="13" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M11.3 2.7l2 2-7.8 7.8-2.6.6.6-2.6 7.8-7.8z"/></svg>';
+  const RECENT_ZH_TITLE_SVG =
+    '<svg viewBox="0 0 16 16" width="13" height="13" fill="none" stroke="currentColor" stroke-width="1.35" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M2.5 4h5.5M5.2 2.5V4M3.3 4c.4 2.1 1.4 3.9 3.1 5.2M7.2 4c-.5 2.2-1.7 4-3.7 5.3"/><path d="M9.4 13l2.2-6.2L13.8 13M10.1 11h3"/></svg>';
   const RECENT_ARCHIVE_SVG =
     '<svg viewBox="0 0 16 16" width="13" height="13" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="2.2" y="3" width="11.6" height="2.8" rx="0.8"/><path d="M3.2 5.8v6.4a1 1 0 0 0 1 1h7.6a1 1 0 0 0 1-1V5.8"/><path d="M6.4 8.8h3.2"/></svg>';
   const RECENT_TRASH_SVG =
@@ -5789,6 +5790,184 @@
     });
   }
 
+  const zhTitleTriedKeys = new Set();
+  const zhTitleInFlightIds = new Set();
+  let zhTitleAutoFixTimer = 0;
+  let zhTitleBatchRunning = false;
+  let zhTitleBatchCancelled = false;
+  let zhTitleBatchBtnStatus = '';
+
+  function looksLikeEnglishTitleClient(title) {
+    const t = String(title || '').trim();
+    if (!t || t.length < 3) return false;
+    const low = t.toLowerCase();
+    if (low === 'new conversation' || low === 'untitled conversation') return false;
+    if (/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(t)) return false;
+    if (/^(?:https?:\/\/|\/|~\/|\.)/i.test(t)) return false;
+    if (/[\u4e00-\u9fff\u3400-\u4dbf]/u.test(t)) return false;
+    return /[A-Za-z]{2,}/.test(t);
+  }
+
+  function updateBatchFixButtonUi(labelText, disabled) {
+    zhTitleBatchBtnStatus = labelText || '';
+    if (!settingsPanelEl) return;
+    const btn = settingsPanelEl.querySelector('[data-ag-cux-fix-titles]');
+    if (!btn) return;
+    if (labelText) btn.textContent = labelText;
+    btn.disabled = Boolean(disabled);
+  }
+
+  function getLiveSummaryTitle(bindings, id) {
+    const b = bindings || findSidebarBindings();
+    const sum = b && b.store && b.store.getState && b.store.getState().trajectorySummaries?.summaries?.[id];
+    return sum ? String((sum.annotations && sum.annotations.title) || sum.summary || '').trim() : '';
+  }
+
+  async function convertSingleTitleToZh(id, expectedTitle, bindings, { force = true, silent = false } = {}) {
+    if (disposed || !id || !expectedTitle || typeof window.__agProjectCall !== 'function') {
+      return { ok: false, error: 'unavailable' };
+    }
+    const res = await window.__agProjectCall(
+      'fixConversationTitle',
+      { conversationId: id, currentTitle: expectedTitle, force },
+      35000
+    );
+    if (disposed) return { ok: false, error: 'disposed' };
+    if (res && res.ok && res.status === 'fixed' && res.title) {
+      const latestTitle = getLiveSummaryTitle(null, id);
+      if (latestTitle && latestTitle !== expectedTitle) {
+        return { ok: true, status: 'skipped_changed' };
+      }
+      const applied = await mutateRecentConversationAnnotation(id, { title: res.title }, findSidebarBindings() || bindings);
+      if (applied && !silent) {
+        showProjectsFloatingNotice(L(`已转为中文标题：${res.title}`, `Converted title: ${res.title}`));
+      }
+      return { ok: true, status: applied ? 'fixed' : 'apply_failed', title: res.title };
+    }
+    if (!silent && res && !res.ok) {
+      const msg =
+        res.error === 'agy_not_found'
+          ? L('未检测到 agy CLI，无法生成中文标题', 'agy CLI not found')
+          : L('转为中文标题失败，请稍后重试', 'Failed to convert title');
+      showProjectsFloatingNotice(msg);
+    }
+    return res || { ok: false, error: 'failed' };
+  }
+
+  function scheduleZhTitleAutoFix() {
+    if (disposed || !FEAT.zhTitleFix || typeof window.__agProjectCall !== 'function') return;
+    cancelLater(zhTitleAutoFixTimer);
+    zhTitleAutoFixTimer = later(() => {
+      zhTitleAutoFixTimer = 0;
+      if (disposed || !FEAT.zhTitleFix || typeof window.__agProjectCall !== 'function') return;
+      const bindings = findSidebarBindings();
+      const act = getSidebarActionsCtx(bindings);
+      if (!bindings || !bindings.store || !act || typeof act.updateConversationAnnotations !== 'function') return;
+      const state = bindings.store.getState();
+      const activeId = getActiveCascadeId();
+      const summaries = (state && state.trajectorySummaries && state.trajectorySummaries.summaries) || {};
+      const nowSec = Math.floor(Date.now() / 1000);
+      for (const [id, summary] of Object.entries(summaries)) {
+        if (!isSidebarVisibleSummary(id, summary, state)) continue;
+        const rawTitle = String((summary && summary.annotations && summary.annotations.title) || (summary && summary.summary) || '').trim();
+        if (!looksLikeEnglishTitleClient(rawTitle)) continue;
+        const updatedAt = Math.max(protoSeconds(summary && summary.lastModifiedTime), protoSeconds(summary && summary.createdTime));
+        const isRecent = updatedAt > 0 && nowSec - updatedAt <= 600;
+        if (id !== activeId && !isRecent) continue;
+        const key = `${id}|${rawTitle}`;
+        if (zhTitleTriedKeys.has(key) || zhTitleInFlightIds.has(id)) continue;
+        zhTitleTriedKeys.add(key);
+        zhTitleInFlightIds.add(id);
+        convertSingleTitleToZh(id, rawTitle, bindings, { force: false, silent: true })
+          .catch(() => {})
+          .finally(() => {
+            zhTitleInFlightIds.delete(id);
+          });
+      }
+    }, 450);
+  }
+
+  async function runBatchFixEnglishTitles(opts = {}) {
+    if (disposed) return { ok: false, error: 'disposed' };
+    if (zhTitleBatchRunning) return { ok: false, error: 'already_running' };
+    if (typeof window.__agProjectCall !== 'function') {
+      return { ok: false, error: 'rpc_unavailable' };
+    }
+    const bindings = findSidebarBindings();
+    const act = getSidebarActionsCtx(bindings);
+    if (!act || typeof act.updateConversationAnnotations !== 'function') {
+      return { ok: false, error: 'sidebar_actions_unavailable' };
+    }
+
+    zhTitleBatchRunning = true;
+    zhTitleBatchCancelled = false;
+    updateBatchFixButtonUi(L('扫描中…', 'Scanning…'), true);
+    try {
+      const limit = Number(opts && opts.limit) > 0 ? Math.floor(Number(opts.limit)) : 60;
+      const scanRes = await window.__agProjectCall('scanEnglishTitles', { limit }, 15000);
+      if (disposed || zhTitleBatchCancelled) return { ok: false, error: 'cancelled' };
+      if (!scanRes || !scanRes.ok) {
+        const errText = L('扫描失败', 'Scan failed');
+        updateBatchFixButtonUi(errText, false);
+        return { ok: false, error: (scanRes && scanRes.error) || 'scan_failed' };
+      }
+      if (!scanRes.agyAvailable) {
+        const msg = L('未检测到 agy CLI', 'agy CLI not found');
+        updateBatchFixButtonUi(msg, false);
+        return { ok: false, error: 'agy_not_found' };
+      }
+      const candidates = Array.isArray(scanRes.candidates) ? scanRes.candidates : [];
+      if (candidates.length === 0) {
+        const msg = L('无需修正', 'Up to date');
+        updateBatchFixButtonUi(msg, false);
+        return { ok: true, total: 0, fixed: 0, skipped: 0, failed: 0 };
+      }
+
+      const total = candidates.length;
+      let done = 0;
+      let fixed = 0;
+      let skipped = 0;
+      let failed = 0;
+      let cursor = 0;
+      const workerCount = Math.min(2, total);
+      updateBatchFixButtonUi(L(`修正中 0/${total}…`, `Fixing 0/${total}…`), true);
+
+      const worker = async () => {
+        while (!disposed && !zhTitleBatchCancelled) {
+          const idx = cursor++;
+          if (idx >= total) break;
+          const item = candidates[idx];
+          const res = await convertSingleTitleToZh(item.conversationId, item.title, bindings, {
+            force: false,
+            silent: true
+          }).catch(() => ({ ok: false, error: 'exec_error' }));
+          done += 1;
+          if (res && res.ok && res.status === 'fixed') {
+            fixed += 1;
+          } else if (res && res.ok) {
+            skipped += 1;
+          } else {
+            failed += 1;
+          }
+          if (!disposed && !zhTitleBatchCancelled) {
+            updateBatchFixButtonUi(L(`修正中 ${done}/${total}…`, `Fixing ${done}/${total}…`), true);
+          }
+        }
+      };
+
+      await Promise.all(Array.from({ length: workerCount }, () => worker()));
+      if (disposed || zhTitleBatchCancelled) return { ok: false, error: 'cancelled' };
+      const doneLabel = failed > 0
+        ? L(`✓ 已修正 ${fixed} 条（${failed} 失败）`, `✓ Fixed ${fixed} (${failed} failed)`)
+        : L(`✓ 已修正 ${fixed} 条`, `✓ Fixed ${fixed}`);
+      updateBatchFixButtonUi(doneLabel, false);
+      return { ok: true, total, fixed, skipped, failed };
+    } finally {
+      zhTitleBatchRunning = false;
+    }
+  }
+  window.__agRunBatchFixEnglishTitles = runBatchFixEnglishTitles;
+
   function commitRecentInlineRename(input, commit) {
     if (!input) return;
     const id = input.getAttribute('data-ag-recent-rename-input') || recentRenamingId;
@@ -5798,6 +5977,9 @@
     recentLastSig = '';
     if (commit && id && nextVal && nextVal !== orig) {
       mutateRecentConversationAnnotation(id, { title: nextVal }, findSidebarBindings());
+      if (typeof window.__agProjectCall === 'function') {
+        window.__agProjectCall('markTitleUserRenamed', { conversationId: id, title: nextVal }, 5000).catch(() => {});
+      }
     }
     syncSidebarEnhancements();
   }
@@ -5836,6 +6018,11 @@
           startRecentInlineRename(cur.id);
           return;
         }
+        if (act === 'zh-title') {
+          closeRecentRowMenu();
+          convertSingleTitleToZh(cur.id, cur.title, bindings, { force: true, silent: false });
+          return;
+        }
         if (act === 'archive') {
           closeRecentRowMenu();
           mutateRecentConversationAnnotation(cur.id, { archived: true }, bindings);
@@ -5862,10 +6049,14 @@
           ? `<div class="ag-rm-meta">${RECENT_FOLDER_SVG}<span class="ag-rm-label">${escapeHtml(st.projectName)}</span></div><div class="ag-rm-sep"></div>`
           : '';
     const delLabel = st.confirmDelete ? L('确认删除？', 'Confirm delete?') : L('删除', 'Delete');
+    const zhTitleItemHtml = looksLikeEnglishTitleClient(st.title)
+      ? `<button type="button" class="ag-rm-item" data-ag-rm-act="zh-title"${canMutate ? '' : ' disabled'}>${RECENT_ZH_TITLE_SVG}<span class="ag-rm-label">${escapeHtml(L('转为中文标题', 'Convert to Chinese title'))}</span></button>`
+      : '';
     menu.innerHTML =
       projPart +
       `<button type="button" class="ag-rm-item" data-ag-rm-act="pin"${canMutate ? '' : ' disabled'}>${RECENT_PIN_SVG}<span class="ag-rm-label">${escapeHtml(L('置顶对话', 'Pin'))}</span></button>` +
       `<button type="button" class="ag-rm-item" data-ag-rm-act="rename"${canMutate ? '' : ' disabled'}>${RECENT_RENAME_SVG}<span class="ag-rm-label">${escapeHtml(L('重命名', 'Rename'))}</span></button>` +
+      zhTitleItemHtml +
       `<button type="button" class="ag-rm-item" data-ag-rm-act="archive"${canMutate ? '' : ' disabled'}>${RECENT_ARCHIVE_SVG}<span class="ag-rm-label">${escapeHtml(L('归档', 'Archive'))}</span></button>` +
       `<div class="ag-rm-sep"></div>` +
       `<button type="button" class="ag-rm-item ag-rm-danger" data-ag-rm-act="delete" data-confirm="${st.confirmDelete ? '1' : '0'}"${canMutate ? '' : ' disabled'}>${RECENT_TRASH_SVG}<span class="ag-rm-label">${escapeHtml(delLabel)}</span></button>`;
@@ -6213,7 +6404,7 @@
     if (disposed) return;
     restoreLegacySidebarCjkNodes();
     const unifiedRecentsOn = Boolean(FEAT.hideSidebarProjects);
-    if (!FEAT.folderStatus && !FEAT.recentSection && !unifiedRecentsOn) {
+    if (!FEAT.folderStatus && !FEAT.recentSection && !unifiedRecentsOn && !FEAT.zhTitleFix) {
       if (sidebarStoreUnsub) {
         sidebarStoreUnsub();
         sidebarStoreUnsub = null;
@@ -6245,6 +6436,7 @@
     const hasFocus = typeof document.hasFocus === 'function' ? document.hasFocus() : true;
     syncFolderStatusBadges(bindings, state, activeId, hasFocus);
     syncRecentSection(bindings, state, activeId, hasFocus);
+    scheduleZhTitleAutoFix();
   }
 
   const onWindowSidebarEvent = () => scheduleSidebarSync();
@@ -6849,6 +7041,14 @@
           'Chinese UI Localization',
           '将 Antigravity 原生界面与增强面板切换为简体中文（默认关闭，保持英文原版界面）',
           'Translate Antigravity UI and enhancement panels into Simplified Chinese (English by default)'
+        ],
+        [
+          'claudeUxZhTitleFix',
+          'zhTitleFix',
+          '中文对话标题自动纠偏',
+          'Auto-Fix Chinese Chat Titles',
+          '当中文提问被 Antigravity 误生成英文标题时，通过本机 agy (Gemini Flash) 自动纠正为简洁中文标题（保留专业英文词）',
+          'Automatically rewrites English titles on Chinese conversations into concise Chinese via local agy (Gemini Flash), preserving technical terms'
         ]
       ]
     },
@@ -7036,6 +7236,20 @@
                         }">${label}</button>`
                     ).join('')}
                   </div>
+                </div>
+                <div class="ag-cux-settings-row">
+                  <div style="min-width:0">
+                    <div class="ag-cux-settings-title">${escapeHtml(L('批量修正历史英文标题', 'Fix Existing English Titles'))}</div>
+                    <div class="ag-cux-settings-desc">${escapeHtml(
+                      L(
+                        '扫描并修正侧栏中由中文提问误生成的历史英文标题（保留手动改名记录）',
+                        'Scan and rewrite existing English titles on Chinese conversations (preserves manual renames)'
+                      )
+                    )}</div>
+                  </div>
+                  <button type="button" class="ag-cux-action-btn" data-ag-cux-fix-titles${zhTitleBatchRunning ? ' disabled' : ''}>${escapeHtml(
+                    zhTitleBatchBtnStatus || L('立即修正', 'Fix Now')
+                  )}</button>
                 </div>`
                   : ''
               }
@@ -7056,6 +7270,12 @@
         setCjkScaleOverride(btn.getAttribute('data-ag-cux-cjk-scale'));
       });
     });
+    const fixTitlesBtn = panel.querySelector('[data-ag-cux-fix-titles]');
+    if (fixTitlesBtn) {
+      fixTitlesBtn.addEventListener('click', () => {
+        runBatchFixEnglishTitles();
+      });
+    }
   }
 
   function applyImmediateFeatureEffects(featKey, on) {
@@ -7118,6 +7338,9 @@
     } else if (featKey === 'overviewPanel') {
       if (!on) teardownOverviewPanel();
       else syncOverviewPanel(true);
+    } else if (featKey === 'zhTitleFix') {
+      if (on) scheduleZhTitleAutoFix();
+      else cancelLater(zhTitleAutoFixTimer);
     }
     syncSidebarEnhancements();
     scheduleSync();
@@ -14125,6 +14348,16 @@
     if (autoQuotaRefreshTimer) {
       cancelLater(autoQuotaRefreshTimer);
       autoQuotaRefreshTimer = 0;
+    }
+    if (zhTitleAutoFixTimer) {
+      cancelLater(zhTitleAutoFixTimer);
+      zhTitleAutoFixTimer = 0;
+    }
+    zhTitleBatchCancelled = true;
+    zhTitleTriedKeys.clear();
+    zhTitleInFlightIds.clear();
+    if (window.__agRunBatchFixEnglishTitles === runBatchFixEnglishTitles) {
+      window.__agRunBatchFixEnglishTitles = null;
     }
     if (sidebarStoreUnsub) {
       sidebarStoreUnsub();

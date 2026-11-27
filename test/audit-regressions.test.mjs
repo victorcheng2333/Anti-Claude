@@ -4211,7 +4211,11 @@ test('[Scheme C · Orchestrator Level-3 Planner Effort & Official Whitelisted Ex
     assert.equal(mainPop.getAttribute('data-open'), 'true', 'keeps popover open after selecting executor effort');
     assert.equal(triPop.getAttribute('data-open'), 'true');
     assert.match(subPop.querySelector('[data-ag-cm-tritrigger="executor"]').textContent, /Hydrogen · Medium/);
-    assert.ok(subPop.querySelector('[data-ag-cm-tritrigger="executor"] .ag-cm-dot'), 'shows blue dot for custom executor');
+    assert.equal(
+      subPop.querySelector('[data-ag-cm-tritrigger="executor"] .ag-cm-dot'),
+      null,
+      'does not render redundant blue dot beside Executor model'
+    );
 
     /* Clicking default variant (1528) writes 0 (UNSPECIFIED) matching native Settings KSb */
     triPop.querySelector('[data-ag-cm-exec-val="1528"]').click();
