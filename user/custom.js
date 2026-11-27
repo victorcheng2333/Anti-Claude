@@ -3278,6 +3278,81 @@
     };
   }
 
+  function handleExecutorPickerClick(e) {
+    const execValBtn = e.target.closest('[data-ag-cm-exec-val]');
+    if (execValBtn) {
+      const val = Number(execValBtn.getAttribute('data-ag-cm-exec-val')) || 0;
+      const api = discoverModelSelectorApi(activeModelTriggerBtn);
+      const execCat = api ? buildExecutorCatalog(api) : null;
+      const defVal = execCat && execCat.defaultVariant && execCat.defaultVariant.opt ? execCat.defaultVariant.opt.value : 0;
+      applyExecutorModelPrefValue(val, defVal);
+      renderModelPopovers();
+      return true;
+    }
+    const execFamBtn = e.target.closest('[data-ag-cm-exec-family]');
+    if (execFamBtn) {
+      const baseName = execFamBtn.getAttribute('data-ag-cm-exec-family');
+      const api = discoverModelSelectorApi(activeModelTriggerBtn);
+      if (api) {
+        const execCat = buildExecutorCatalog(api);
+        const fam = execCat.families.find((f) => f.baseName === baseName);
+        if (fam && fam.variants.length) {
+          const curEff = execCat.activeVariant && execCat.activeVariant.effort;
+          const chosen =
+            (curEff && fam.variants.find((v) => v.effort === curEff)) || fam.variants[fam.variants.length - 1];
+          const defVal = execCat.defaultVariant && execCat.defaultVariant.opt ? execCat.defaultVariant.opt.value : 0;
+          if (chosen && chosen.opt && chosen.opt.value !== undefined) {
+            applyExecutorModelPrefValue(chosen.opt.value, defVal);
+            renderModelPopovers();
+          }
+        }
+      }
+      return true;
+    }
+    return false;
+  }
+
+  function renderExecutorPickerHtml(execCat) {
+    const execRowsHtml = execCat.families
+      .map((fam) => {
+        const isFamActive = Boolean(execCat.activeFamily && execCat.activeFamily.baseName === fam.baseName);
+        const pillsHtml =
+          fam.variants.length > 1
+            ? `<div class="ag-cm-exec-pills">${fam.variants
+                .map((v) => {
+                  const isVarOn = Boolean(
+                    isFamActive && execCat.activeVariant && execCat.activeVariant.opt.value === v.opt.value
+                  );
+                  const lbl = displayEffortLabel(v.effort) || v.opt.label;
+                  return `<button type="button" class="ag-cm-exec-pill" data-ag-cm-exec-val="${escapeHtml(
+                    String(v.opt.value)
+                  )}" data-active="${isVarOn ? 'true' : 'false'}">${escapeHtml(lbl)}</button>`;
+                })
+                .join('')}</div>`
+            : '';
+        return `<div class="ag-cm-exec-item">
+          <button type="button" class="ag-cm-row ag-cm-exec-row" data-ag-cm-exec-family="${escapeHtml(fam.baseName)}">
+            <span class="ag-cm-exec-name">${escapeHtml(fam.baseName)}</span>
+            ${isFamActive ? SVG_CM_CHECK : ''}
+          </button>
+          ${pillsHtml}
+        </div>`;
+      })
+      .join('');
+    const resetHtml = !execCat.isDefault
+      ? `<div class="ag-cm-divider"></div>
+         <button type="button" class="ag-cm-row" style="min-height:32px;font-size:13px;" data-ag-cm-exec-val="0">
+           <span>${L('恢复默认执行模型', 'Reset to default')}</span>
+           <span class="ag-cm-key">${escapeHtml(execCat.defaultShortLabel)}</span>
+         </button>`
+      : '';
+    return (
+      `<div class="ag-cm-sec-hdr ag-cm-exec-hdr"><span>${L('执行模型与强度 · 全局', 'Executor · Global')}</span><span class="ag-cm-exec-tag">${L('白名单', 'Official')}</span></div>` +
+      execRowsHtml +
+      resetHtml
+    );
+  }
+
   function ensureModelPopovers() {
     let mainPop = document.getElementById('ag-claude-model-popover');
     if (!mainPop) {
@@ -3401,6 +3476,7 @@
           }
           return;
         }
+        if (handleExecutorPickerClick(e)) return;
         const moreBtn = e.target.closest('[data-ag-cm-more-family]');
         if (moreBtn) {
           const baseName = moreBtn.getAttribute('data-ag-cm-more-family');
@@ -3443,35 +3519,7 @@
           closeClaudeModelPopover();
           return;
         }
-        const execValBtn = e.target.closest('[data-ag-cm-exec-val]');
-        if (execValBtn) {
-          const val = Number(execValBtn.getAttribute('data-ag-cm-exec-val')) || 0;
-          const api = discoverModelSelectorApi(activeModelTriggerBtn);
-          const execCat = api ? buildExecutorCatalog(api) : null;
-          const defVal = execCat && execCat.defaultVariant && execCat.defaultVariant.opt ? execCat.defaultVariant.opt.value : 0;
-          applyExecutorModelPrefValue(val, defVal);
-          renderModelPopovers();
-          return;
-        }
-        const execFamBtn = e.target.closest('[data-ag-cm-exec-family]');
-        if (execFamBtn) {
-          const baseName = execFamBtn.getAttribute('data-ag-cm-exec-family');
-          const api = discoverModelSelectorApi(activeModelTriggerBtn);
-          if (api) {
-            const execCat = buildExecutorCatalog(api);
-            const fam = execCat.families.find((f) => f.baseName === baseName);
-            if (fam && fam.variants.length) {
-              const curEff = execCat.activeVariant && execCat.activeVariant.effort;
-              const chosen =
-                (curEff && fam.variants.find((v) => v.effort === curEff)) || fam.variants[fam.variants.length - 1];
-              const defVal = execCat.defaultVariant && execCat.defaultVariant.opt ? execCat.defaultVariant.opt.value : 0;
-              if (chosen && chosen.opt && chosen.opt.value !== undefined) {
-                applyExecutorModelPrefValue(chosen.opt.value, defVal);
-                renderModelPopovers();
-              }
-            }
-          }
-        }
+        handleExecutorPickerClick(e);
       });
       document.body.appendChild(triPop);
     }
@@ -3576,11 +3624,16 @@
     const primaryRowsHtml = cat.primaryFamilies
       .map((fam, idx) => {
         const isSelected = Boolean(cat.activeFamily && cat.activeFamily.baseName === fam.baseName);
+        const isOrchRow = Boolean(fam.isOrchestratorFamily || /^Orchestrator\s*·\s*/i.test(fam.baseName));
+        const displayName = isOrchRow ? fam.baseName.replace(/^Orchestrator\s*·\s*/i, '').trim() : fam.baseName;
         const rightHtml = isSelected ? SVG_CM_CHECK : `<span class="ag-cm-key">${idx + 1}</span>`;
         return `<button type="button" class="ag-cm-row" data-ag-cm-hover="none" data-ag-cm-family="${escapeHtml(
           fam.baseName
         )}">
-          <span style="min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${escapeHtml(fam.baseName)}</span>
+          <span class="ag-cm-primary-label">
+            <span class="ag-cm-primary-name">${escapeHtml(displayName)}</span>
+            ${isOrchRow ? `<span class="ag-cm-orch-badge">${escapeHtml(L('编排', 'Orch'))}</span>` : ''}
+          </span>
           ${rightHtml}
         </button>`;
       })
@@ -3606,6 +3659,12 @@
 
     const effSubActive = activeModelSubmenu === 'effort' && hasAdjustableEffort ? ' data-active-sub="true"' : '';
     const effDisabled = hasAdjustableEffort ? '' : ' data-disabled="true"';
+    const activeIsOrch = Boolean(
+      cat.activeFamily && (cat.activeFamily.isOrchestratorFamily || /orchestrator/i.test(cat.activeFamily.baseName))
+    );
+    const mainExecCat = activeIsOrch ? buildExecutorCatalog(api) : null;
+    const hasMainExecRow = Boolean(mainExecCat && mainExecCat.families.length > 0);
+    const execSubActive = activeModelSubmenu === 'executor' && hasMainExecRow ? ' data-active-sub="true"' : '';
     const moreSubActive = activeModelSubmenu === 'more' ? ' data-active-sub="true"' : '';
 
     const rawTooltipNote = typeof api?.tooltipNote === 'string' ? api.tooltipNote.trim() : '';
@@ -3632,6 +3691,20 @@
           hasAdjustableEffort ? SVG_CM_CHEVRON : ''
         }</span>
       </button>
+      ${
+        hasMainExecRow
+          ? `<button type="button" class="ag-cm-row" data-ag-cm-hover="executor" data-ag-cm-subtrigger="executor"${execSubActive}>
+        <span class="ag-cm-exec-label">
+          <span>${L('执行模型', 'Executor model')}</span>
+          ${!mainExecCat.isDefault ? '<span class="ag-cm-dot"></span>' : ''}
+        </span>
+        <span class="ag-cm-right ag-cm-exec-summary">
+          <span>${escapeHtml(mainExecCat.shortSummary)}</span>
+          ${SVG_CM_CHEVRON}
+        </span>
+      </button>`
+          : ''
+      }
       <button type="button" class="ag-cm-row" data-ag-cm-hover="more" data-ag-cm-subtrigger="more"${moreSubActive}>
         <span style="display:inline-flex;align-items:center;gap:6px;">
           <span>${L('更多模型', 'More models')}</span>
@@ -3662,6 +3735,10 @@
             </button>`;
           })
           .join('');
+      subPop.setAttribute('data-open', 'true');
+      triPop.setAttribute('data-open', 'false');
+    } else if (activeModelSubmenu === 'executor' && hasMainExecRow) {
+      subPop.innerHTML = renderExecutorPickerHtml(mainExecCat);
       subPop.setAttribute('data-open', 'true');
       triPop.setAttribute('data-open', 'false');
     } else if (activeModelSubmenu === 'more' && cat.moreFamilies.length > 0) {
@@ -3775,44 +3852,8 @@
           triOpen = true;
         }
       } else if (isExecTriActive && execCat) {
-        const execRowsHtml = execCat.families
-          .map((fam) => {
-            const isFamActive = Boolean(execCat.activeFamily && execCat.activeFamily.baseName === fam.baseName);
-            const pillsHtml =
-              fam.variants.length > 1
-                ? `<div class="ag-cm-exec-pills">${fam.variants
-                    .map((v) => {
-                      const isVarOn = Boolean(
-                        isFamActive && execCat.activeVariant && execCat.activeVariant.opt.value === v.opt.value
-                      );
-                      const lbl = displayEffortLabel(v.effort) || v.opt.label;
-                      return `<button type="button" class="ag-cm-exec-pill" data-ag-cm-exec-val="${escapeHtml(
-                        String(v.opt.value)
-                      )}" data-active="${isVarOn ? 'true' : 'false'}">${escapeHtml(lbl)}</button>`;
-                    })
-                    .join('')}</div>`
-                : '';
-            return `<div class="ag-cm-exec-item">
-              <button type="button" class="ag-cm-row ag-cm-exec-row" data-ag-cm-exec-family="${escapeHtml(fam.baseName)}">
-                <span class="ag-cm-exec-name">${escapeHtml(fam.baseName)}</span>
-                ${isFamActive ? SVG_CM_CHECK : ''}
-              </button>
-              ${pillsHtml}
-            </div>`;
-          })
-          .join('');
-        const resetHtml = !execCat.isDefault
-          ? `<div class="ag-cm-divider"></div>
-             <button type="button" class="ag-cm-row" style="min-height:32px;font-size:13px;" data-ag-cm-exec-val="0">
-               <span>${L('恢复默认执行模型', 'Reset to default')}</span>
-               <span class="ag-cm-key">${escapeHtml(execCat.defaultShortLabel)}</span>
-             </button>`
-          : '';
         triPop.setAttribute('data-tri-kind', 'executor');
-        triPop.innerHTML =
-          `<div class="ag-cm-sec-hdr ag-cm-exec-hdr"><span>${L('执行模型与强度 · 全局', 'Executor · Global')}</span><span class="ag-cm-exec-tag">${L('白名单', 'Official')}</span></div>` +
-          execRowsHtml +
-          resetHtml;
+        triPop.innerHTML = renderExecutorPickerHtml(execCat);
         triPop.setAttribute('data-open', 'true');
         triOpen = true;
       }
@@ -5914,7 +5955,7 @@
     }
     list.sort((a, b) => b.priority - a.priority || b.updatedAt - a.updatedAt);
     recentItemsById = new Map(list.map((it) => [it.id, it]));
-    const limit = isUnified ? recentPageLimit : recentExpanded ? 8 : 4;
+    const limit = isUnified ? recentPageLimit : recentExpanded ? 8 : 3;
     const items = list.slice(0, limit);
     const total = list.length;
     const nowBucket = Math.floor(Date.now() / 30000);
@@ -6111,7 +6152,7 @@
             FEAT.i18n ? `显示更多（还有 ${total - items.length} 条）` : `Show more (${total - items.length} left)`
           )}</button>`
         : ''
-      : total > 4
+      : total > 3
         ? `<button type="button" class="ag-recent-more" data-ag-recent-more>${recentExpanded ? L('收起', 'Show less') : L('展开更多', 'Show more')}</button>`
         : '';
 
@@ -6132,6 +6173,10 @@
                 sideHtml = `<span class="ag-claude-unread-dot"></span>${age ? `<span>${escapeHtml(age)}</span>` : ''}`;
               }
               const tip = it.project ? `${it.title}\n${L('所属项目：', 'Project: ')}${it.project}` : it.title;
+              const projTagHtml =
+                !isUnified && it.project
+                  ? `<span class="ag-recent-proj">${escapeHtml(it.project)}</span>`
+                  : '';
               const actionsHtml =
                 isUnified && !isRenaming
                   ? `<div class="ag-recent-actions"><button type="button" class="ag-recent-act-btn" data-ag-recent-pin="${escapeHtml(it.id)}" title="${escapeHtml(L('置顶对话', 'Pin'))}" aria-label="${escapeHtml(L('置顶对话', 'Pin'))}">${RECENT_PIN_SVG}</button><button type="button" class="ag-recent-act-btn" data-ag-recent-menu="${escapeHtml(it.id)}" title="${escapeHtml(L('更多选项', 'More options'))}" aria-label="${escapeHtml(L('更多选项', 'More options'))}">${RECENT_MORE_SVG}</button></div>`
@@ -6139,7 +6184,7 @@
               const mainInner = isRenaming
                 ? `<input type="text" class="ag-recent-rename-input" data-ag-recent-rename-input="${escapeHtml(it.id)}" data-orig-title="${escapeHtml(it.title)}" value="${escapeHtml(it.title)}" />`
                 : `<div class="ag-recent-title">${escapeHtml(it.title)}</div>`;
-              return `<div class="ag-recent-row" role="button" tabindex="0"${isRenaming ? '' : ' draggable="true"'} data-ag-recent-id="${escapeHtml(it.id)}" data-ag-recent-title="${escapeHtml(it.title)}" data-active="${isAct ? 'true' : 'false'}"${it.project ? ` data-has-project="true"` : ''}${isRenaming ? ' data-renaming="true"' : ''} title="${escapeHtml(tip)}"><div class="ag-recent-main">${mainInner}</div>${isRenaming ? '' : `<div class="ag-recent-side">${sideHtml}</div>${actionsHtml}`}</div>`;
+              return `<div class="ag-recent-row" role="button" tabindex="0"${isRenaming ? '' : ' draggable="true"'} data-ag-recent-id="${escapeHtml(it.id)}" data-ag-recent-title="${escapeHtml(it.title)}" data-active="${isAct ? 'true' : 'false'}"${it.project ? ` data-has-project="true"` : ''}${isRenaming ? ' data-renaming="true"' : ''} title="${escapeHtml(tip)}"><div class="ag-recent-main">${mainInner}</div>${isRenaming ? '' : `<div class="ag-recent-side">${projTagHtml}${sideHtml}</div>${actionsHtml}`}</div>`;
             })
             .join('')}</div>` + moreHtml
         : `<div class="ag-recent-empty">${escapeHtml(L('暂无最近对话', 'No recent conversations'))}</div>`;
