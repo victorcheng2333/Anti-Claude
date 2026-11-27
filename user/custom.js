@@ -2840,25 +2840,53 @@
     const families = Array.from(familyMap.values());
     const isOrch = (f) => Boolean(f && (f.isOrchestratorFamily || /orchestrator/i.test(f.baseName)));
     const isCoreGemini = (f) => /^gemini\b/i.test(f.baseName) && !isOrch(f);
+    const nonOrchFamilies = families.filter((f) => !isOrch(f));
+    const allOrchFamilies = hasDynamicOrch ? orchFamilies : families.filter(isOrch);
 
-    let primaryFamilies = families
-      .filter(isCoreGemini)
-      .sort((a, b) => modelCoreRank(a.baseName) - modelCoreRank(b.baseName))
-      .slice(0, 5);
+    const preferredPickers = [
+      () => nonOrchFamilies.find((f) => /^gemini\b.*\bneon\b/i.test(f.baseName)),
+      () => nonOrchFamilies.find((f) => /^gemini\b.*\bhydrogen\b/i.test(f.baseName)),
+      () => allOrchFamilies.find((f) => /\bneon\b/i.test(f.baseName)),
+      () =>
+        nonOrchFamilies.find((f) => !/·/.test(f.baseName) && /^claude\b.*\bopus\b.*\b5\.5\b/i.test(f.baseName)) ||
+        nonOrchFamilies.find((f) => !/·/.test(f.baseName) && /^claude\b.*\bopus\b/i.test(f.baseName)),
+      () =>
+        nonOrchFamilies.find((f) => !/·/.test(f.baseName) && /^claude\b.*\bsonnet\b.*\b5\.5\b/i.test(f.baseName)) ||
+        nonOrchFamilies.find((f) => !/·/.test(f.baseName) && /^claude\b.*\bsonnet\b/i.test(f.baseName))
+    ];
+
+    const primaryFamilies = [];
+    const primarySet = new Set();
+    for (const pick of preferredPickers) {
+      const match = pick();
+      if (match && !primarySet.has(match)) {
+        primarySet.add(match);
+        primaryFamilies.push(match);
+      }
+    }
     if (!primaryFamilies.length) {
-      /* Accounts that only expose non-Gemini models (e.g. "Claude Opus 5.5 · Devin") would otherwise get an
-         empty "Models · This chat" list with everything buried under More models: keep the native order. */
-      primaryFamilies = families.filter((f) => !isOrch(f)).slice(0, 5);
+      const fallback = families
+        .filter(isCoreGemini)
+        .sort((a, b) => modelCoreRank(a.baseName) - modelCoreRank(b.baseName))
+        .slice(0, 5);
+      const chosen = fallback.length ? fallback : nonOrchFamilies.slice(0, 5);
+      for (const fam of chosen) {
+        if (!primarySet.has(fam)) {
+          primarySet.add(fam);
+          primaryFamilies.push(fam);
+        }
+      }
     }
 
-    const primarySet = new Set(primaryFamilies);
     const nonPrimaryEntries = families
       .filter((f) => !primarySet.has(f))
       .map((f) => ({
         group: isOrch(f) ? 'orch' : 'other',
         fam: f
       }));
-    const orchEntries = hasDynamicOrch ? orchFamilies.map((f) => ({ group: 'orch', fam: f })) : [];
+    const orchEntries = hasDynamicOrch
+      ? orchFamilies.filter((f) => !primarySet.has(f)).map((f) => ({ group: 'orch', fam: f }))
+      : [];
     const moreFamilies = orchEntries
       .concat(nonPrimaryEntries)
       .sort((a, b) => (a.group === b.group ? 0 : a.group === 'orch' ? -1 : 1));
@@ -3552,7 +3580,7 @@
         return `<button type="button" class="ag-cm-row" data-ag-cm-hover="none" data-ag-cm-family="${escapeHtml(
           fam.baseName
         )}">
-          <span>${escapeHtml(fam.baseName)}</span>
+          <span style="min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${escapeHtml(fam.baseName)}</span>
           ${rightHtml}
         </button>`;
       })
@@ -3639,12 +3667,15 @@
     } else if (activeModelSubmenu === 'more' && cat.moreFamilies.length > 0) {
       const orchEntries = cat.moreFamilies.filter((x) => x.group === 'orch');
       const otherEntries = cat.moreFamilies.filter((x) => x.group !== 'orch');
-      const execCat = orchEntries.length > 0 ? buildExecutorCatalog(api) : null;
+      const hasAnyOrch =
+        orchEntries.length > 0 ||
+        cat.primaryFamilies.some((f) => Boolean(f && (f.isOrchestratorFamily || /orchestrator/i.test(f.baseName))));
+      const execCat = hasAnyOrch ? buildExecutorCatalog(api) : null;
       const hasExecRow = Boolean(execCat && execCat.families.length > 0);
       const isExecTriActive = Boolean(activeModelTrimenu && activeModelTrimenu.kind === 'executor' && hasExecRow);
 
       let subHtml = '';
-      if (orchEntries.length > 0) {
+      if (orchEntries.length > 0 || hasExecRow) {
         subHtml += `<div class="ag-cm-sec-hdr">${escapeHtml(L('多智能体编排', 'Orchestrators'))}</div>`;
         subHtml += orchEntries
           .map(({ fam }) => {
@@ -3677,7 +3708,7 @@
           })
           .join('');
         if (hasExecRow) {
-          subHtml += `<div class="ag-cm-sub-divider"></div>
+          subHtml += `${orchEntries.length > 0 ? '<div class="ag-cm-sub-divider"></div>' : ''}
             <button type="button" class="ag-cm-row ag-cm-sub-exec-row" data-ag-cm-tri-hover="executor" data-ag-cm-tritrigger="executor"${
               isExecTriActive ? ' data-active-sub="true"' : ''
             }>
@@ -3694,7 +3725,7 @@
       }
 
       if (otherEntries.length > 0) {
-        subHtml += `${orchEntries.length > 0 ? '<div class="ag-cm-divider"></div>' : ''}<div class="ag-cm-sec-hdr">${escapeHtml(
+        subHtml += `${orchEntries.length > 0 || hasExecRow ? '<div class="ag-cm-divider"></div>' : ''}<div class="ag-cm-sec-hdr">${escapeHtml(
           L('其他模型', 'Other models')
         )}</div>`;
         subHtml += otherEntries
