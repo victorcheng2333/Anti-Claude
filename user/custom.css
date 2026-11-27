@@ -2874,11 +2874,24 @@ html:not([data-ag-theme-mode="dark"]) body:not(.dark) .ag-claude-folder-badge[da
   display: none !important;
 }
 
-/* 顶部最近对话区块：使下方虚拟列表自适应高度（compact 模式） */
+/* 顶部最近对话区块（compact 模式）：让直接父容器成为纵向 flex 布局，确保下方原生虚拟列表严格占满剩余高度并由 [data-testid="conversation-list-sidebar"] 正常内部滚动 */
+div:has(> #ag-claude-recent-section[data-mode="compact"]) {
+  display: flex !important;
+  flex-direction: column !important;
+  min-height: 0 !important;
+  overflow: hidden !important;
+}
+
+#ag-claude-recent-section[data-mode="compact"] {
+  max-height: 45% !important;
+  overflow-y: auto !important;
+}
+
 #ag-claude-recent-section[data-mode="compact"] + div {
   height: auto !important;
   flex: 1 1 0% !important;
   min-height: 0 !important;
+  overflow: hidden !important;
 }
 
 /* 统一侧栏模式（unified）：原生虚拟列表仅承接顶部的置顶对话，高度严丝合缝，与下方全量「最近对话」共享外层单一滚动条 */
