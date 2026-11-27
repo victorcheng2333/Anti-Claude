@@ -33,6 +33,9 @@ The installer changes user config (`~/.gemini/antigravity/anti-claude/user/` fil
    - Prepends an idempotent `<!-- BEGIN anti-claude -->` rule block to `~/.gemini/AGENTS.md` enabling language-adaptive Claude-style mid-turn progress updates, invisible `<!-- todo:N/M -->` progression, `ask_question` interactive choice cards, official-blue orbiting step timers (`#2F75C3` / `#2F71E3`), and in-flow 3-state `- [ ]` / `- [/]` / `- [x]` live checklist cards compatible with both Developer and Knowledge Work modes;
    - Registers the `0-token` macOS `launchd` auto-sync watcher (`com.antigravity.anti-claude.autosync`), handles `v2.33.0+` macOS cold-launch `--remote-debugging-port=0` auto-bootstrap natively inside `core/daemon.mjs` (keeping `/Applications/Antigravity.app`'s Apple code signature 100% untouched), and triggers immediate hot-reload in the running Antigravity window.
 
+## After an Antigravity Update
+If a feature stops working, run `node "$HOME/Developer/Anti-Claude/install.mjs" compat` with Antigravity open. It probes every private Antigravity surface the patch relies on and reports each broken one as a `host dependency degraded: <id> (<reason>) → affects <features>` warning. The same list is shown under Settings → UI Enhancements → Compatibility. Fix entries in `HOST_COMPAT_DEPS` (`user/custom.js`) first.
+
 ## Clean Rollback
 ```bash
 node "$HOME/Developer/Anti-Claude/install.mjs" uninstall

@@ -13,6 +13,36 @@
   const CFG_ROOT = (typeof ctx !== 'undefined' && ctx && (ctx.config || ctx)) || {};
   const MODS =
     (typeof ctx !== 'undefined' && ctx && (ctx.modules || (ctx.config && ctx.config.modules))) || {};
+  /* Host compatibility registry from core/runtime.js (see "Host compatibility" section below).
+     Convention for error handling around Antigravity internals: a catch that swallows a failed call into a
+     host-private API (store.dispatch, router.navigate, fiber-discovered setters, preload bridges) must report
+     it via compatFail(id, err) so the breakage shows up in Settings instead of silently doing nothing.
+     Empty catches are reserved for DOM/cleanup/storage calls whose failure is expected and harmless. */
+  const COMPAT =
+    typeof ctx !== 'undefined' && ctx && ctx.compat && typeof ctx.compat.fail === 'function' ? ctx.compat : null;
+  function compatOk(id) {
+    if (COMPAT) COMPAT.ok(id);
+    return true;
+  }
+  function compatFail(id, reason) {
+    if (COMPAT) COMPAT.fail(id, reason);
+    return false;
+  }
+  function compatReport(id, found, reason) {
+    if (COMPAT) COMPAT.report(id, Boolean(found), reason);
+    return Boolean(found);
+  }
+  /* React internals: one place that knows the `__reactFiber$<hash>` / `__reactContainer$<hash>` key shapes */
+  function reactFiberOf(el) {
+    if (!el) return null;
+    const fk = Object.keys(el).find((k) => k.startsWith('__reactFiber$'));
+    return fk ? el[fk] : null;
+  }
+  function reactRootFiberOf(el) {
+    if (!el) return null;
+    const fk = Object.keys(el).find((k) => k.startsWith('__reactContainer') || k.startsWith('__reactFiber'));
+    return fk ? el[fk] : null;
+  }
   const CFG_UI_STATE =
     CFG_ROOT.uiState && typeof CFG_ROOT.uiState === 'object' && !Array.isArray(CFG_ROOT.uiState)
       ? CFG_ROOT.uiState
@@ -842,30 +872,33 @@
   function discoverAgentInputProps(anchorEl) {
     const inputBox = getActiveInputBox(anchorEl);
     if (!inputBox) return null;
-    const fk = Object.keys(inputBox).find((k) => k.startsWith('__reactFiber$'));
-    let f = fk ? inputBox[fk] : null;
+    let f = reactFiberOf(inputBox);
     for (let i = 0; i < 45 && f; i++, f = f.return) {
       const pr = f.memoizedProps;
-      if (pr && typeof pr.handleSubmit === 'function') return pr;
+      if (pr && typeof pr.handleSubmit === 'function') {
+        compatOk('composer.agentProps');
+        return pr;
+      }
     }
+    compatFail('composer.agentProps', 'input box rendered but no ancestor fiber exposes handleSubmit()');
     return null;
   }
 
   function discoverComposerContextFromInputBox(anchorEl) {
     const inputBox = getActiveInputBox(anchorEl);
     if (!inputBox) return null;
-    const fk = Object.keys(inputBox).find((k) => k.startsWith('__reactFiber$'));
-    let f = fk ? inputBox[fk] : null;
+    let f = reactFiberOf(inputBox);
     for (let i = 0; i < 45 && f; i++, f = f.return) {
       const pr = f.memoizedProps;
-      if (pr && pr.value && pr.value.inputBoxRef) return pr.value;
+      if (pr && pr.value && pr.value.inputBoxRef) return compatOk('composer.context') && pr.value;
       let dep = f.dependencies ? f.dependencies.firstContext : null;
       while (dep) {
         const v = dep.memoizedValue;
-        if (v && typeof v === 'object' && v.inputBoxRef) return v;
+        if (v && typeof v === 'object' && v.inputBoxRef) return compatOk('composer.context') && v;
         dep = dep.next;
       }
     }
+    compatFail('composer.context', 'input box rendered but no composer context carries inputBoxRef');
     return null;
   }
 
@@ -963,8 +996,7 @@
 
     const viewports = document.querySelectorAll('[data-testid="autoscroll-viewport"], .overflow-y-auto');
     for (const vp of viewports) {
-      const fk = Object.keys(vp).find((k) => k.startsWith('__reactFiber$'));
-      let f = fk ? vp[fk] : null;
+      let f = reactFiberOf(vp);
       for (let i = 0; i < 35 && f; i++, f = f.return) {
         const p = f.memoizedProps;
         const slice = p && p.trajectorySlice;
@@ -1216,7 +1248,9 @@
           return true;
         }
       }
-    } catch {}
+    } catch (err) {
+      compatFail('composer.context', err);
+    }
 
     manualCompactPending = { cascadeId: '', startedAt: 0 };
     syncCompactVisualState(true);
@@ -1667,8 +1701,7 @@
       return null;
     }
     const inputBox = getActiveInputBox();
-    const fk = inputBox ? Object.keys(inputBox).find((k) => k.startsWith('__reactFiber$')) : null;
-    let f = fk ? inputBox[fk] : null;
+    let f = reactFiberOf(inputBox);
     const seen = new Set();
     let foundSvc = null;
     let foundTierName = '';
@@ -1722,9 +1755,9 @@
 
     if (!foundSvc || !foundTierName) {
       const root = document.getElementById('root');
-      const rfk = root && Object.keys(root).find((k) => k.startsWith('__reactContainer') || k.startsWith('__reactFiber'));
-      if (rfk && root[rfk]) {
-        const rq = [root[rfk]];
+      const rootFiber = reactRootFiberOf(root);
+      if (rootFiber) {
+        const rq = [rootFiber];
         const rSeen = new Set();
         while (rq.length && rSeen.size < 320 && (!foundSvc || !foundTierName)) {
           const rf = rq.shift();
@@ -1743,8 +1776,10 @@
     if (foundSvc) {
       cachedQuotaSvc = foundSvc;
       lastQuotaSvcMissTs = 0;
+      compatOk('quota.service');
     } else {
       lastQuotaSvcMissTs = Date.now();
+      if (inputBox) compatFail('quota.service', 'no fiber prop or context exposes retrieveUserQuotaSummary()');
     }
     if (foundTierName) {
       const nextAccountKey = `${foundEmail}|${foundTierId}|${foundTierName}`;
@@ -2579,27 +2614,36 @@
     }
   }
 
+  function isValidNativeModelApi(obj) {
+    return Boolean(
+      obj &&
+        typeof obj === 'object' &&
+        typeof obj.setSelectedModel === 'function' &&
+        Array.isArray(obj.modelOptions) &&
+        obj.modelOptions.length > 0
+    );
+  }
+
+  function readNativeModelSelectorApi(btn) {
+    if (!btn) return null;
+    let f = reactFiberOf(btn);
+    let fallback = null;
+    for (let i = 0; i < 28 && f; i++, f = f.return) {
+      const p = f.memoizedProps;
+      if (!p) continue;
+      if (isValidNativeModelApi(p.value)) return p.value;
+      if (!fallback && isValidNativeModelApi(p)) fallback = p;
+    }
+    return fallback;
+  }
+
   function discoverModelSelectorApi(btnEl) {
     const isProjectTrigger = Boolean(
       (btnEl && btnEl.hasAttribute && btnEl.hasAttribute('data-ag-pd-model-trigger')) ||
       (!btnEl && activeModelTriggerBtn && activeModelTriggerBtn.hasAttribute && activeModelTriggerBtn.hasAttribute('data-ag-pd-model-trigger'))
     );
     const nativeBtn = document.querySelector('button[data-testid="model-selector-trigger"]');
-    const isValidApi = (obj) =>
-      Boolean(obj && typeof obj === 'object' && typeof obj.setSelectedModel === 'function' && Array.isArray(obj.modelOptions) && obj.modelOptions.length > 0);
-    const readNativeApi = (btn) => {
-      if (!btn) return null;
-      const fk = Object.keys(btn).find((k) => k.startsWith('__reactFiber$'));
-      let f = fk ? btn[fk] : null;
-      let fallback = null;
-      for (let i = 0; i < 28 && f; i++, f = f.return) {
-        const p = f.memoizedProps;
-        if (!p) continue;
-        if (isValidApi(p.value)) return p.value;
-        if (!fallback && isValidApi(p)) fallback = p;
-      }
-      return fallback;
-    };
+    const readNativeApi = readNativeModelSelectorApi;
 
     if (isProjectTrigger) {
       const reduxApi = buildReduxModelSelectorApi();
@@ -2615,10 +2659,14 @@
                   select: (val) => {
                     try {
                       if (reduxPick && typeof reduxPick.select === 'function') reduxPick.select(val);
-                    } catch {}
+                    } catch (err) {
+                      compatFail('model.nativeApi', err);
+                    }
                     try {
                       if (nativePick && typeof nativePick.select === 'function') nativePick.select(val);
-                    } catch {}
+                    } catch (err) {
+                      compatFail('model.nativeApi', err);
+                    }
                   }
                 }
               : undefined;
@@ -2635,7 +2683,9 @@
               );
               try {
                 nativeApi.setSelectedModel(match || opt);
-              } catch {}
+              } catch (err) {
+                compatFail('model.nativeApi', err);
+              }
             }
           };
         }
@@ -2762,7 +2812,9 @@
         try {
           api.orchestratorPick.select(orchestratorPlannerOpt.value);
           calledNativeOrch = true;
-        } catch {}
+        } catch (err) {
+          compatFail('model.nativeApi', err);
+        }
       }
       if (!calledNativeOrch || isReduxFallback) {
         try {
@@ -2773,7 +2825,9 @@
               payload: { model: orchestratorPlannerOpt.value }
             });
           }
-        } catch {}
+        } catch (err) {
+          compatFail('app.store', err);
+        }
       }
     }
     let calledNativeSelect = false;
@@ -2781,7 +2835,9 @@
       try {
         api.setSelectedModel(targetOpt);
         calledNativeSelect = true;
-      } catch {}
+      } catch (err) {
+        compatFail('model.nativeApi', err);
+      }
     }
     /* Only mirror into global Redux modelSelection when no native session setter handled it (or on Redux fallback) */
     if ((!calledNativeSelect || isReduxFallback) && targetOpt.value !== undefined) {
@@ -2796,7 +2852,9 @@
             }
           });
         }
-      } catch {}
+      } catch (err) {
+        compatFail('app.store', err);
+      }
     }
     later(() => {
       syncModelTriggerDisplay();
@@ -3007,7 +3065,9 @@
         });
         if (typeof sub === 'function') prefStoreUnsub = sub;
         else if (sub && typeof sub.dispose === 'function') prefStoreUnsub = () => sub.dispose();
-      } catch {}
+      } catch (err) {
+        compatFail('prefs.store', err);
+      }
     }
   }
 
@@ -3034,8 +3094,7 @@
     }
     const root = document.getElementById('root') || (document.body && document.body.firstElementChild);
     if (!root) return null;
-    const fk = Object.keys(root).find((k) => k.startsWith('__reactContainer') || k.startsWith('__reactFiber'));
-    const start = fk ? root[fk] : null;
+    const start = reactRootFiberOf(root);
     if (!start) return null;
     const queue = [start];
     const seen = new Set();
@@ -3058,18 +3117,21 @@
       if (mp && isPrefStore(mp.value)) {
         cachedPrefStore = mp.value;
         bindPrefStoreSubscription(mp.value);
+        compatOk('prefs.store');
         return mp.value;
       }
       for (let dep = f.dependencies && f.dependencies.firstContext; dep; dep = dep.next) {
         if (isPrefStore(dep.memoizedValue)) {
           cachedPrefStore = dep.memoizedValue;
           bindPrefStoreSubscription(dep.memoizedValue);
+          compatOk('prefs.store');
           return dep.memoizedValue;
         }
       }
       if (f.child) queue.push(f.child);
       if (f.sibling) queue.push(f.sibling);
     }
+    compatFail('prefs.store', 'no store with getPrefValue()/setPrefValue() within the first 600 fibers');
     return null;
   }
 
@@ -3095,9 +3157,9 @@
     if (executorRolesFetchInFlight || now - executorRolesLastTryTs < 3000) return;
 
     const root = document.getElementById('root') || (document.body && document.body.firstElementChild);
-    const fk = root && Object.keys(root).find((k) => k.startsWith('__reactContainer') || k.startsWith('__reactFiber'));
-    if (!fk) return;
-    const queue = [root[fk]];
+    const rootFiber = reactRootFiberOf(root);
+    if (!rootFiber) return;
+    const queue = [rootFiber];
     const seen = new Set();
     let lsClient = null;
     while (queue.length && seen.size < 600 && !lsClient) {
@@ -3121,7 +3183,11 @@
       if (f.child) queue.push(f.child);
       if (f.sibling) queue.push(f.sibling);
     }
-    if (!lsClient) return;
+    if (!lsClient) {
+      compatFail('orchestrator.lsClient', 'no fiber exposes getMendelFlags() within the first 600 fibers');
+      return;
+    }
+    compatOk('orchestrator.lsClient');
     executorRolesLastTryTs = now;
     executorRolesFetchInFlight = true;
     try {
@@ -3144,11 +3210,13 @@
             }
           }
         })
-        .catch(() => {
+        .catch((err) => {
           executorRolesFetchInFlight = false;
+          compatFail('orchestrator.lsClient', err);
         });
-    } catch {
+    } catch (err) {
       executorRolesFetchInFlight = false;
+      compatFail('orchestrator.lsClient', err);
     }
   }
 
@@ -3158,14 +3226,18 @@
       try {
         const v = Number(ps.getState().getPrefValue('orchestratorExecutorModel'));
         if (Number.isFinite(v) && v >= 0) return v;
-      } catch {}
+      } catch (err) {
+        compatFail('prefs.store', err);
+      }
     }
     try {
       const { store } = resolveProjectsStoreAndBindings();
       const st = store && typeof store.getState === 'function' ? store.getState() : null;
       const rv = Number(st && st.userConfig && st.userConfig.userSettings && st.userConfig.userSettings.orchestratorExecutorModel);
       if (Number.isFinite(rv) && rv >= 0) return rv;
-    } catch {}
+    } catch (err) {
+      compatFail('app.store', err);
+    }
     return fallbackExecutorModelVal;
   }
 
@@ -3177,7 +3249,9 @@
     if (ps) {
       try {
         ps.getState().setPrefValue('orchestratorExecutorModel', nextVal);
-      } catch {}
+      } catch (err) {
+        compatFail('prefs.store', err);
+      }
     }
   }
 
@@ -3432,7 +3506,9 @@
                 try {
                   api.setIsOpen(true);
                   return;
-                } catch {}
+                } catch (err) {
+                  compatFail('model.nativeApi', err);
+                }
               }
               /* Fallback pass-through when native Fiber API is unavailable */
               bypassNativeModelTriggerUntil = Date.now() + 350;
@@ -3979,7 +4055,9 @@
     if (api.open && typeof api.setIsOpen === 'function') {
       try {
         api.setIsOpen(false);
-      } catch {}
+      } catch (err) {
+        compatFail('model.nativeApi', err);
+      }
     }
     focusBeforeModelMenu = document.activeElement && document.activeElement !== document.body ? document.activeElement : btn;
     activeModelTriggerBtn = btn;
@@ -4265,8 +4343,7 @@
 
   function activeReactFiber(el) {
     if (!el) return null;
-    const fk = Object.keys(el).find((k) => k.startsWith('__reactFiber$'));
-    let fiber = fk ? el[fk] : null;
+    let fiber = reactFiberOf(el);
     let top = fiber;
     while (top && top.return) top = top.return;
     if (top && top.stateNode && top.stateNode.current && top.stateNode.current !== top) {
@@ -5016,7 +5093,9 @@
         if (normalized) {
           store.dispatch({ type: 'layout/setPendingSplitDrop', payload: null });
         }
-      } catch {}
+      } catch (err) {
+        compatFail('app.store', err);
+      }
     }
   }
   function removePinnedDragGhost() {
@@ -5189,7 +5268,9 @@
                 if (store.getState && store.getState().layout && store.getState().layout.pendingSplitDrop) {
                   store.dispatch({ type: 'layout/setPendingSplitDrop', payload: null });
                 }
-              } catch {}
+              } catch (err) {
+                compatFail('app.store', err);
+              }
             }
           });
         }
@@ -5710,13 +5791,17 @@
       try {
         bindings.router.navigate({ to: '/c/$cascadeId', params: { cascadeId: id } });
         return;
-      } catch {}
+      } catch (err) {
+        compatFail('app.router', err);
+      }
     }
     if (bindings && bindings.stepHandler && typeof bindings.stepHandler.openConversation === 'function') {
       try {
         bindings.stepHandler.openConversation(id);
         return;
-      } catch {}
+      } catch (err) {
+        compatFail('app.router', err);
+      }
     }
     const link = document.querySelector(`a[href*="/c/${id}"]`);
     if (link && typeof link.click === 'function') {
@@ -5741,7 +5826,9 @@
       try {
         bindings.router.navigate({ to: '/' });
         return;
-      } catch {}
+      } catch (err) {
+        compatFail('app.router', err);
+      }
     }
     if (typeof history === 'object' && typeof history.pushState === 'function') {
       history.pushState(null, '', '/');
@@ -7134,8 +7221,7 @@
     let cur = startEl;
     let startFiber = null;
     for (let up = 0; up < 8 && cur && !startFiber; up++, cur = cur.parentElement) {
-      const fk = Object.keys(cur).find((k) => k.startsWith('__reactFiber$'));
-      if (fk && cur[fk]) startFiber = cur[fk];
+      startFiber = reactFiberOf(cur);
     }
     if (!startFiber) return null;
     let f = startFiber;
@@ -7162,6 +7248,8 @@
               (typeof it.onClick === 'function' || typeof it.click === 'function' || Array.isArray(it.items))))
       );
       if (!valid) continue;
+      /* Only success is reported here: most right-click targets legitimately carry no native menu */
+      compatOk('contextMenu.native');
       return {
         items: rawItems,
         onOpenChange: typeof p.onOpenChange === 'function' ? p.onOpenChange : null
@@ -7231,26 +7319,35 @@
     e.stopImmediatePropagation();
     try {
       if (resolved.onOpenChange) resolved.onOpenChange(true);
-    } catch {}
+    } catch (err) {
+      compatFail('contextMenu.native', err);
+    }
     try {
       Promise.resolve(window.electronNative.showContextMenu(payload))
         .then((chosenId) => {
           if (chosenId && cbMap.has(chosenId)) {
             try {
               cbMap.get(chosenId)();
-            } catch {}
+            } catch (err) {
+              compatFail('contextMenu.native', err);
+            }
           }
         })
-        .catch(() => {})
+        .catch((err) => compatFail('bridge.electron', err))
         .finally(() => {
           try {
             if (resolved.onOpenChange) resolved.onOpenChange(false);
-          } catch {}
+          } catch (err) {
+            compatFail('contextMenu.native', err);
+          }
         });
-    } catch {
+    } catch (err) {
+      compatFail('bridge.electron', err);
       try {
         if (resolved.onOpenChange) resolved.onOpenChange(false);
-      } catch {}
+      } catch (closeErr) {
+        compatFail('contextMenu.native', closeErr);
+      }
     }
   };
   document.addEventListener('contextmenu', onNativeContextMenuCapture, true);
@@ -7280,6 +7377,364 @@
     ['16', '16px'],
     ['18', '18px']
   ];
+
+  /* ==========================================================================
+   * Host compatibility: every private Antigravity surface this file leans on.
+   * Each entry names the features that break with it. `anchor` returns the host UI that must be on screen before
+   * a verdict is possible (null = not rendered yet -> stays "unseen"); `probe` returns true / false / reason string,
+   * or null to abstain (used when the discovery helper already reports from its own call site).
+   * When Antigravity updates and a feature stops working, this is the list to fix first.
+   * ========================================================================== */
+  const INPUT_BOX_SELECTOR = '[id="antigravity.agentSidePanelInputBox"]';
+  const HOST_COMPAT_DEPS = [
+    {
+      id: 'composer.inputBox',
+      labelZh: '输入框容器',
+      labelEn: 'Composer container',
+      kind: 'selector',
+      features: ['contextRing', 'modelMenu', 'projects', 'inlineUndo'],
+      anchor: () => document.querySelector('button[data-testid="input-send-button"], button[data-testid="input-cancel-button"]'),
+      probe: () => Boolean(document.querySelector(INPUT_BOX_SELECTOR)) || `send button rendered but ${INPUT_BOX_SELECTOR} is missing`
+    },
+    {
+      id: 'composer.agentProps',
+      labelZh: '输入框提交与运行状态',
+      labelEn: 'Composer submit & running state',
+      kind: 'react-fiber',
+      features: ['contextRing', 'runningTimer'],
+      anchor: () => getActiveInputBox(),
+      probe: () => (discoverAgentInputProps(), null)
+    },
+    {
+      id: 'composer.context',
+      labelZh: '输入框上下文（草稿与附件）',
+      labelEn: 'Composer context (drafts & attachments)',
+      kind: 'react-fiber',
+      features: ['contextRing', 'projects', 'inlineUndo'],
+      anchor: () => getActiveInputBox(),
+      probe: () => (discoverComposerContextFromInputBox(), null)
+    },
+    {
+      id: 'conversation.steps',
+      labelZh: '对话步骤数据',
+      labelEn: 'Conversation step data',
+      kind: 'react-fiber',
+      features: ['contextRing'],
+      anchor: () => {
+        for (const vp of document.querySelectorAll('[data-testid="autoscroll-viewport"]')) {
+          if (vp.querySelector('[data-testid="user-input-step"]')) return vp;
+        }
+        return null;
+      },
+      probe: (vp) => {
+        let f = reactFiberOf(vp);
+        for (let i = 0; i < 35 && f; i++, f = f.return) {
+          const slice = f.memoizedProps && f.memoizedProps.trajectorySlice;
+          if (slice && Array.isArray(slice.stepsInSlice)) return true;
+        }
+        return 'conversation rendered but no ancestor fiber carries trajectorySlice.stepsInSlice';
+      }
+    },
+    {
+      id: 'quota.service',
+      labelZh: '模型配额服务',
+      labelEn: 'Model quota service',
+      kind: 'react-fiber',
+      features: ['contextRing', 'overviewPanel'],
+      anchor: () => getActiveInputBox(),
+      probe: () => (discoverQuotaService(), null)
+    },
+    {
+      id: 'model.nativeApi',
+      labelZh: '原生模型选择器',
+      labelEn: 'Native model selector',
+      kind: 'react-fiber',
+      features: ['modelMenu'],
+      anchor: () => document.querySelector('button[data-testid="model-selector-trigger"]'),
+      probe: (btn) =>
+        Boolean(readNativeModelSelectorApi(btn)) || 'model trigger rendered but no fiber exposes setSelectedModel()/modelOptions'
+    },
+    {
+      id: 'prefs.store',
+      labelZh: '偏好设置存储',
+      labelEn: 'Preference store',
+      kind: 'react-fiber',
+      features: ['modelMenu'],
+      anchor: () => reactRootFiberOf(document.getElementById('root')),
+      probe: () => (discoverPrefStore(), null)
+    },
+    {
+      id: 'orchestrator.lsClient',
+      labelZh: '编排器实验配置',
+      labelEn: 'Orchestrator experiment flags',
+      kind: 'react-fiber',
+      features: ['modelMenu']
+    },
+    {
+      id: 'app.store',
+      labelZh: '应用状态存储（Redux）',
+      labelEn: 'App state store (Redux)',
+      kind: 'react-fiber',
+      features: ['modelMenu', 'projects', 'recentSection', 'hideSidebarProjects', 'folderStatus'],
+      anchor: () => document.querySelector('[data-testid="conversation-list-sidebar"]'),
+      probe: () => {
+        const { store } = resolveProjectsStoreAndBindings();
+        return Boolean(store && typeof store.getState === 'function' && typeof store.dispatch === 'function') ||
+          'sidebar rendered but no fiber exposes a store with getState()/dispatch()';
+      }
+    },
+    {
+      id: 'app.router',
+      labelZh: '页面路由',
+      labelEn: 'App router',
+      kind: 'react-fiber',
+      features: ['projects', 'recentSection', 'hideSidebarProjects', 'folderStatus'],
+      anchor: () => document.querySelector('[data-testid="conversation-list-sidebar"]'),
+      probe: () => {
+        const { bindings } = resolveProjectsStoreAndBindings();
+        const router = bindings && bindings.router;
+        return Boolean(router && typeof router.navigate === 'function') || 'sidebar rendered but no fiber exposes router.navigate()';
+      }
+    },
+    {
+      id: 'sidebar.rows',
+      labelZh: '侧栏对话行',
+      labelEn: 'Sidebar conversation rows',
+      kind: 'selector',
+      features: ['recentSection', 'hideSidebarProjects', 'folderStatus'],
+      anchor: () => {
+        const sb = document.querySelector('[data-testid="conversation-list-sidebar"]');
+        return sb && sb.querySelector('a[href^="/c/"]') ? sb : null;
+      },
+      probe: (sb) =>
+        Boolean(sb.querySelector('[data-testid="conversation-row-sidebar"]')) ||
+        'sidebar lists conversations but none carries data-testid="conversation-row-sidebar"'
+    },
+    {
+      id: 'projects.service',
+      labelZh: '项目管理服务',
+      labelEn: 'Project management service',
+      kind: 'react-fiber',
+      features: ['projects'],
+      anchor: () => document.querySelector('[data-testid="conversation-list-sidebar"]'),
+      probe: () => Boolean(resolveProjectManagementService()) || 'no fiber exposes projectManagementService.deleteProject()'
+    },
+    {
+      id: 'revert.native',
+      labelZh: '消息回退',
+      labelEn: 'Message revert',
+      kind: 'react-fiber',
+      features: ['inlineUndo'],
+      anchor: () => document.querySelector('button[data-testid="revert-button"]'),
+      probe: (btn) => {
+        for (let f = activeReactFiber(btn), d = 0; f && d < 65; f = f.return, d++) {
+          if (f.memoizedProps && f.memoizedProps.revertState) return true;
+        }
+        return 'revert button rendered but no ancestor fiber carries revertState';
+      }
+    },
+    {
+      id: 'contextMenu.native',
+      labelZh: '原生右键菜单',
+      labelEn: 'Native context menu',
+      kind: 'react-fiber',
+      features: ['i18n']
+    },
+    {
+      id: 'settings.nav',
+      labelZh: '设置页导航',
+      labelEn: 'Settings navigation',
+      kind: 'selector',
+      features: [],
+      anchor: () => document.querySelector('[data-testid="settings-sidebar"]'),
+      probe: (sb) =>
+        Boolean(sb.querySelector('[data-testid^="settings-nav-item-"]')) || 'settings sidebar has no settings-nav-item-* entries'
+    },
+    {
+      id: 'bridge.projectRpc',
+      labelZh: '本地服务通道',
+      labelEn: 'Local daemon bridge',
+      kind: 'bridge',
+      features: ['projects', 'zhTitleFix', 'customizations'],
+      probe: () =>
+        typeof window.__agProjectRpc === 'function' || 'CDP binding __agProjectRpc missing (daemon not attached to this window)'
+    },
+    {
+      id: 'bridge.electron',
+      labelZh: 'Electron 原生接口',
+      labelEn: 'Electron preload API',
+      kind: 'bridge',
+      features: ['i18n', 'projects'],
+      probe: () => {
+        const en = window.electronNative;
+        if (!en) return 'window.electronNative missing';
+        const missing = ['showContextMenu', 'getPathForFile'].filter((k) => typeof en[k] !== 'function');
+        return missing.length === 0 || `electronNative lacks ${missing.join(', ')}`;
+      }
+    }
+  ];
+  const HOST_COMPAT_KIND_LABELS = {
+    selector: ['页面结构', 'DOM'],
+    'react-fiber': ['React 内部', 'React internals'],
+    bridge: ['桥接接口', 'Bridge']
+  };
+  let hostCompatUnsub = null;
+  let hostCompatTimer = 0;
+
+  function registerHostCompat() {
+    if (!COMPAT) return;
+    for (const dep of HOST_COMPAT_DEPS) {
+      COMPAT.define(dep.id, {
+        label: dep.labelEn,
+        kind: dep.kind,
+        features: dep.features,
+        anchor: dep.anchor,
+        probe: dep.probe
+      });
+    }
+    hostCompatUnsub = COMPAT.subscribe(() => {
+      if (settingsPanelEl && !settingsPanelEl.hidden) renderHostCompatSection(settingsPanelEl);
+    });
+    /* Early passes catch a broken startup surface; the slow cadence picks up panels opened later. Probes are
+       cached lookups or bounded fiber walks, so this stays far below the per-frame sync cost. */
+    const delays = [4000, 20000];
+    const step = () => {
+      if (disposed) return;
+      COMPAT.check();
+      hostCompatTimer = later(step, delays.length ? delays.shift() : 120000);
+    };
+    hostCompatTimer = later(step, delays.shift());
+  }
+
+  function teardownHostCompat() {
+    if (hostCompatUnsub) {
+      hostCompatUnsub();
+      hostCompatUnsub = null;
+    }
+    cancelLater(hostCompatTimer);
+    hostCompatTimer = 0;
+  }
+
+  function hostCompatFeatureTitle(featKey) {
+    for (const grp of SETTINGS_GROUPS) {
+      for (const [, fk, titleZh, titleEn] of grp.items) {
+        if (fk === featKey) return L(titleZh, titleEn);
+      }
+    }
+    return featKey;
+  }
+
+  function buildHostCompatDiagnostics(snap) {
+    const lines = [
+      `Anti-Claude ${snap.patchVersion || ''} · Antigravity ${snap.hostVersion || 'unknown'}`,
+      `checked ${snap.checkedAt ? new Date(snap.checkedAt).toISOString() : 'never'} · ok ${snap.counts.ok} · degraded ${snap.counts.degraded} · unseen ${snap.counts.unseen}`
+    ];
+    for (const e of snap.entries) {
+      lines.push(`[${e.status}] ${e.id} (${e.kind})${e.reason ? ` — ${e.reason}` : ''}${e.features.length ? ` · affects ${e.features.join(', ')}` : ''}`);
+    }
+    return lines.join('\n');
+  }
+
+  function hostCompatSectionHtml(snap) {
+    const statusText = {
+      ok: L('正常', 'OK'),
+      degraded: L('已降级', 'Degraded'),
+      unseen: L('未检测', 'Not checked')
+    };
+    const order = { degraded: 0, ok: 1, unseen: 2 };
+    const depMeta = new Map(HOST_COMPAT_DEPS.map((d) => [d.id, d]));
+    const rows = snap.entries
+      .slice()
+      .sort((a, b) => order[a.status] - order[b.status])
+      .map((e) => {
+        const meta = depMeta.get(e.id);
+        const title = meta ? L(meta.labelZh, meta.labelEn) : e.label;
+        const kind = HOST_COMPAT_KIND_LABELS[e.kind] ? L(...HOST_COMPAT_KIND_LABELS[e.kind]) : e.kind;
+        const feats = e.features.map(hostCompatFeatureTitle).join(L('、', ', '));
+        const descParts = [kind];
+        if (feats) descParts.push(L(`影响：${feats}`, `Affects: ${feats}`));
+        if (e.status === 'unseen') descParts.push(L('相关界面还没打开过', 'Related UI has not been opened yet'));
+        return `
+          <div class="ag-cux-settings-row" data-ag-compat-id="${escapeHtml(e.id)}" data-ag-compat-status="${e.status}">
+            <div style="min-width:0">
+              <div class="ag-cux-settings-title">${escapeHtml(title)}</div>
+              <div class="ag-cux-settings-desc">${escapeHtml(descParts.join(' · '))}</div>
+              ${e.reason ? `<div class="ag-cux-settings-desc ag-compat-reason">${escapeHtml(e.reason)}</div>` : ''}
+            </div>
+            <span class="ag-compat-badge" data-status="${e.status}">${escapeHtml(statusText[e.status] || e.status)}</span>
+          </div>`;
+      })
+      .join('');
+    const summary =
+      snap.counts.degraded > 0
+        ? L(
+            `${snap.counts.degraded} 项依赖已失效，相关功能可能不生效。升级 Anti-Claude 或把诊断信息发给维护者。`,
+            `${snap.counts.degraded} dependencies are broken; related features may not work. Update Anti-Claude or share the diagnostics.`
+          )
+        : L(
+            '检测 Anti-Claude 依赖的 Antigravity 内部接口。Antigravity 升级后若有功能失效，这里会标出原因。',
+            'Checks the Antigravity internals Anti-Claude relies on. If an Antigravity update breaks a feature, it shows up here.'
+          );
+    return `
+      <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:12px">
+        <div style="min-width:0">
+          <h3 class="m-0">${escapeHtml(L('兼容性', 'Compatibility'))}</h3>
+          <div class="ag-cux-settings-desc" style="margin-top:4px">${escapeHtml(
+            `Antigravity ${snap.hostVersion || L('版本未知', 'unknown version')} · ${summary}`
+          )}</div>
+        </div>
+        <div style="display:flex;gap:6px;flex-shrink:0">
+          <button type="button" class="ag-cux-action-btn" data-ag-compat-recheck>${escapeHtml(L('重新检测', 'Re-check'))}</button>
+          <button type="button" class="ag-cux-action-btn" data-ag-compat-copy>${escapeHtml(L('复制诊断信息', 'Copy diagnostics'))}</button>
+        </div>
+      </div>
+      <div class="ag-cux-settings-group">${rows}</div>`;
+  }
+
+  function renderHostCompatSection(panel) {
+    if (!panel || !COMPAT) return;
+    const host = panel.querySelector('[data-ag-compat-section]');
+    if (!host) return;
+    const snap = COMPAT.snapshot();
+    host.innerHTML = hostCompatSectionHtml(snap);
+    const degradedFeats = COMPAT.degradedFeatures();
+    panel.querySelectorAll('[data-ag-cux-feat]').forEach((sw) => {
+      const row = sw.closest('.ag-cux-settings-row');
+      if (!row) return;
+      const featKey = sw.getAttribute('data-ag-cux-feat');
+      let tag = row.querySelector('.ag-compat-feature-tag');
+      if (degradedFeats.has(featKey)) {
+        if (!tag) {
+          tag = document.createElement('span');
+          tag.className = 'ag-compat-badge ag-compat-feature-tag';
+          tag.setAttribute('data-status', 'degraded');
+          const titleEl = row.querySelector('.ag-cux-settings-title');
+          if (titleEl) titleEl.appendChild(tag);
+        }
+        tag.textContent = L('已降级', 'Degraded');
+      } else if (tag) {
+        tag.remove();
+      }
+    });
+    const recheck = host.querySelector('[data-ag-compat-recheck]');
+    if (recheck) recheck.addEventListener('click', () => COMPAT.check());
+    const copyBtn = host.querySelector('[data-ag-compat-copy]');
+    if (copyBtn) {
+      copyBtn.addEventListener('click', () => {
+        const text = buildHostCompatDiagnostics(COMPAT.check());
+        const done = () => {
+          copyBtn.textContent = L('✓ 已复制', '✓ Copied');
+        };
+        if (navigator.clipboard && typeof navigator.clipboard.writeText === 'function') {
+          navigator.clipboard.writeText(text).then(done, () => {
+            copyBtn.textContent = L('复制失败', 'Copy failed');
+          });
+        } else {
+          copyBtn.textContent = L('复制失败', 'Copy failed');
+        }
+      });
+    }
+  }
 
   const SETTINGS_GROUPS = [
     {
@@ -7551,8 +8006,10 @@
             </div>
           </div>`
         ).join('')}
+        ${COMPAT ? '<div data-ag-compat-section style="display:flex;flex-direction:column;gap:8px"></div>' : ''}
       </div>
     `;
+    renderHostCompatSection(panel);
     panel.querySelectorAll('[data-ag-cux-switch]').forEach((sw) => {
       sw.addEventListener('click', () => {
         const modKey = sw.getAttribute('data-ag-cux-switch');
@@ -7807,6 +8264,7 @@
       settingsRightRef.appendChild(panel);
       settingsPanelEl = panel;
     }
+    if (COMPAT) COMPAT.check();
     renderSettingsPanelContent(settingsPanelEl);
     settingsPanelEl.hidden = false;
     syncSettingsSwitchesUi();
@@ -8774,7 +9232,9 @@
       try {
         const p = en.getPathForFile(file);
         if (typeof p === 'string' && p.trim()) return p.trim();
-      } catch {}
+      } catch (err) {
+        compatFail('bridge.electron', err);
+      }
     }
     if (typeof file.path === 'string' && file.path.trim()) return file.path.trim();
     return '';
@@ -9579,14 +10039,18 @@
         const prov = pm.getProjectStateProvider(projectId);
         const st = prov && typeof prov.getState === 'function' ? prov.getState() : null;
         if (st && st.project && typeof st.project === 'object') return st.project;
-      } catch {}
+      } catch (err) {
+        compatFail('projects.service', err);
+      }
     }
     if (pm && pm.projectsStateProvider && typeof pm.projectsStateProvider.getState === 'function') {
       try {
         const list = pm.projectsStateProvider.getState() || [];
         const hit = list.find((item) => item && item.project && item.project.id === projectId);
         if (hit && hit.project) return hit.project;
-      } catch {}
+      } catch (err) {
+        compatFail('projects.service', err);
+      }
     }
     return null;
   }
@@ -9672,7 +10136,9 @@
             },
             replace: true
           });
-        } catch {}
+        } catch (err) {
+          compatFail('app.router', err);
+        }
       }
       if (!disposed) {
         if (projectsViewOpen) renderProjectsView();
@@ -9700,7 +10166,9 @@
             })
         });
         return;
-      } catch {}
+      } catch (err) {
+        compatFail('app.router', err);
+      }
     }
     const settingsBtn = document.querySelector('[data-testid="settings-button"]');
     if (settingsBtn) settingsBtn.click();
@@ -10425,7 +10893,9 @@
         store.dispatch({ type: 'newConvoResourceSelector/setMagicWorkspaceSelected', payload: false });
         store.dispatch({ type: 'newConvoResourceSelector/setPseudoProjectSelected', payload: false });
         store.dispatch({ type: 'newConvoResourceSelector/setLastSelectedProject', payload: project.id });
-      } catch {}
+      } catch (err) {
+        compatFail('app.store', err);
+      }
     }
     if (modelPopoverOpen) closeClaudeModelPopover();
     closeProjectsView();
@@ -10435,7 +10905,9 @@
           to: '/',
           search: project && project.id ? { project: project.id } : {}
         });
-      } catch {}
+      } catch (err) {
+        compatFail('app.router', err);
+      }
     } else {
       const newBtn = document.querySelector('[data-testid="new-conversation-button"]');
       if (newBtn) newBtn.click();
@@ -10506,7 +10978,9 @@
                   await new Promise((r) => setTimeout(r, 40));
                 }
                 resolvedMedia = (inputBoxRef.getMediaAttachments() || []).slice();
-              } catch {}
+              } catch (err) {
+                compatFail('composer.context', err);
+              }
             }
             if (!resolvedMedia.length) {
               resolvedMedia = buildFallbackMediaObjects(mediaList);
@@ -10519,7 +10993,9 @@
                 if (typeof inputBoxRef.forgetTrackedUploads === 'function') {
                   inputBoxRef.forgetTrackedUploads();
                 }
-              } catch {}
+              } catch (err) {
+                compatFail('composer.context', err);
+              }
             }
           };
           try {
@@ -10723,7 +11199,9 @@
       if (en && typeof en.getPathForFile === 'function') {
         try {
           realPath = en.getPathForFile(f) || '';
-        } catch {}
+        } catch (err) {
+          compatFail('bridge.electron', err);
+        }
       }
       if (!realPath && typeof f.path === 'string' && f.path) realPath = f.path;
       if (realPath) {
@@ -14605,6 +15083,7 @@
     return true;
   }
 
+  registerHostCompat();
   if (!mountBodyEnhancements()) {
     const onBodyReady = () => {
       mountBodyEnhancements();
@@ -14637,6 +15116,7 @@
       pendingBodyReadyCleanup = null;
     }
     projectComposerDrafts.clear();
+    teardownHostCompat();
     observer.disconnect();
     stopUxI18nObserver();
     try {

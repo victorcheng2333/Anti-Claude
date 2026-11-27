@@ -9,6 +9,7 @@
  *   node install.mjs sync-upgrade [--force] [--overwrite-local]
  *   node install.mjs auto-update-on | auto-update-off
  *   node install.mjs doctor
+ *   node install.mjs compat             Probe the Antigravity internals the patch relies on in the running app
  *   node install.mjs sync-fonts
  *   node install.mjs uninstall          Idempotent: a second run is a no-op
  *
@@ -1290,6 +1291,14 @@ function cleanupUninstallExtras(state) {
   return { fontsRemoved, sidecarsRemoved, projectsCleaned };
 }
 
+/* One warning line per broken host dependency, e.g. after an Antigravity update moved a private surface */
+function compatWarnings(compat) {
+  if (!compat || !Array.isArray(compat.degraded)) return [];
+  return compat.degraded.map(
+    (d) => `host dependency degraded: ${d.id}${d.reason ? ` (${d.reason})` : ''}${d.features?.length ? ` → affects ${d.features.join(', ')}` : ''}`
+  );
+}
+
 function runLiveVerify() {
   const fakeEnv = process.env.ANTI_CLAUDE_FAKE_VERIFY_OK ?? process.env.FAKE_VERIFY_OK;
   if (NO_CDP && fakeEnv === undefined) {
@@ -1322,6 +1331,7 @@ function runLiveVerify() {
     exitStatus,
     themeStyle: parsed.themeStyle ?? null,
     customStyle: parsed.customStyle ?? null,
+    compat: parsed.compat ?? null,
     reachable: parsed.live?.reachable ?? null,
     reason: ok ? undefined : parsed.live?.reachable === false ? 'app_not_running_or_unreachable' : 'verify_reported_not_ok'
   };
@@ -1968,6 +1978,37 @@ function restoreCliLayer(state, sharedSaveDir = null) {
 /* Commands                                                                   */
 /* -------------------------------------------------------------------------- */
 
+/* `compat`: probe the private Antigravity surfaces the patch depends on, in the running app.
+   Run it right after an Antigravity update to see which features broke before anyone hits them. */
+function cmdCompat() {
+  const verify = runLiveVerify();
+  const fp = getAntigravityAppFingerprint();
+  const report = {
+    antigravityAppVersion: fp.version,
+    reachable: verify.reachable ?? null,
+    compat: verify.compat || null
+  };
+  if (verify.skipped) {
+    return finalize(Object.assign(report, { skipped: verify.skipped }), { warnings: ['live probing disabled (ANTI_CLAUDE_NO_CDP=1)'] });
+  }
+  if (verify.reachable === false || (!verify.ok && !verify.compat)) {
+    return finalize(report, { critical: [`cannot reach a live Antigravity window: ${verify.reason || 'unknown'}`] });
+  }
+  if (!verify.compat) {
+    return finalize(report, {
+      critical: ['live window has no compatibility registry (runtime predates it, or injection is off): run `install` again']
+    });
+  }
+  if (!Array.isArray(verify.compat.entries) || verify.compat.entries.length === 0) {
+    return finalize(report, {
+      critical: [
+        'live window has the registry but no dependencies registered: the deployed user/custom.js predates the compatibility list (run `sync-upgrade`)'
+      ]
+    });
+  }
+  return finalize(report, { warnings: compatWarnings(verify.compat) });
+}
+
 async function cmdDoctor() {
   const state = readJsonSafe(STATE_FILE, null);
   const pbtxt = readTextSafe(AGY_STATE_PBTXT) || '';
@@ -2131,6 +2172,7 @@ async function cmdInstall(flags) {
 
   const verify = runLiveVerify();
   if (!verify.ok) warnings.push(`live verify: ${verify.reason}`);
+  warnings.push(...compatWarnings(verify.compat));
 
   const fp = getAntigravityAppFingerprint();
   state.sync = Object.assign({}, state.sync, { appVersion: fp.version, appSig: fp.sig, cliVersion: antigravityCli.version, lastAppliedAt: Date.now() });
@@ -2258,11 +2300,13 @@ async function cmdSyncUpgrade(flags) {
   if (force || appChanged || afterPull || changed || legacyMigration.removedDir) {
     verify = runLiveVerify();
     if (!verify.ok) warnings.push(`live verify: ${verify.reason}`);
+    warnings.push(...compatWarnings(verify.compat));
   }
 
   state.sync = Object.assign({}, state.sync, { appVersion: fp.version, appSig: fp.sig, lastAppliedAt: now });
   saveState(state);
-  const summary = `sync-upgrade | agy=${fp.version} | appChanged=${appChanged} | remoteChecked=${!selfPull.skipped} | updated=${layer.updated.length + layer.merged.length} | conflicts=${layer.conflicts.length}`;
+  const degradedIds = (verify.compat?.degraded || []).map((d) => d.id);
+  const summary = `sync-upgrade | agy=${fp.version} | appChanged=${appChanged} | remoteChecked=${!selfPull.skipped} | updated=${layer.updated.length + layer.merged.length} | conflicts=${layer.conflicts.length}${degradedIds.length ? ` | degraded=${degradedIds.join(',')}` : ''}`;
   appendSyncLog(summary);
   return finalize({ summary, selfPull, legacyMigration, userLayer: layer, cliLayer, coreDaemon, stepUnlock, ruleStatus, verify }, { warnings });
 }
@@ -2347,12 +2391,13 @@ async function main(argv) {
     return console.log(JSON.stringify(res, null, 2));
   }
   if (sub === 'doctor') return cmdDoctor();
+  if (sub === 'compat') return cmdCompat();
   if (sub === '--help' || sub === '-h' || sub === 'help') {
     return console.log(
       JSON.stringify(
         {
           ok: true,
-          commands: ['install', 'sync-upgrade', 'doctor', 'uninstall', 'auto-update-on', 'auto-update-off', 'sync-fonts']
+          commands: ['install', 'sync-upgrade', 'doctor', 'compat', 'uninstall', 'auto-update-on', 'auto-update-off', 'sync-fonts']
         },
         null,
         2
@@ -2363,7 +2408,7 @@ async function main(argv) {
     { subcommand: sub },
     {
       critical: [
-        `unknown command: ${sub} (expected: install | sync-upgrade | doctor | uninstall | auto-update-on | auto-update-off | sync-fonts)`
+        `unknown command: ${sub} (expected: install | sync-upgrade | doctor | compat | uninstall | auto-update-on | auto-update-off | sync-fonts)`
       ]
     }
   );

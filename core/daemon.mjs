@@ -123,6 +123,7 @@ if (VERIFY_ONCE && (process.env.ANTI_CLAUDE_FAKE_VERIFY_OK === '1' || process.en
         userDir: USER_DIR,
         themeStyle: { present: ok, length: ok ? 1024 : 0 },
         customStyle: { present: ok, length: ok ? 4096 : 0 },
+        compat: process.env.ANTI_CLAUDE_FAKE_COMPAT ? JSON.parse(process.env.ANTI_CLAUDE_FAKE_COMPAT) : null,
         live: { reachable: ok, port: ok ? 9222 : null, targets: ok ? 1 : 0 }
       },
       null,
@@ -4409,6 +4410,52 @@ async function sync(opts = {}) {
   }
 }
 
+/* Host compatibility snapshot across live Antigravity windows (see the registry in core/runtime.js).
+   Windows are merged per dependency with "degraded" winning over "ok" over "unseen", so one window on a broken
+   surface is enough to flag it. Returns null when no window carries the registry (old runtime / not injected). */
+const COMPAT_STATUS_RANK = { degraded: 2, ok: 1, unseen: 0 };
+
+function mergeCompatSnapshots(snapshots) {
+  const valid = snapshots.filter((s) => s && Array.isArray(s.entries));
+  if (!valid.length) return null;
+  const byId = new Map();
+  for (const snap of valid) {
+    for (const e of snap.entries) {
+      const prev = byId.get(e.id);
+      if (!prev || (COMPAT_STATUS_RANK[e.status] ?? 0) > (COMPAT_STATUS_RANK[prev.status] ?? 0)) byId.set(e.id, e);
+    }
+  }
+  const entries = Array.from(byId.values());
+  const count = (st) => entries.filter((e) => e.status === st).length;
+  return {
+    patchVersion: valid[0].patchVersion || null,
+    hostVersion: valid.find((s) => s.hostVersion)?.hostVersion || null,
+    windows: valid.length,
+    counts: { ok: count('ok'), degraded: count('degraded'), unseen: count('unseen') },
+    degraded: entries.filter((e) => e.status === 'degraded').map((e) => ({ id: e.id, reason: e.reason, features: e.features })),
+    unseen: entries.filter((e) => e.status === 'unseen').map((e) => e.id),
+    entries
+  };
+}
+
+async function collectLiveCompat() {
+  const snapshots = [];
+  for (const [, entry] of attachedTargets.entries()) {
+    if (!entry.hostConfirmed || entry.type !== 'page') continue;
+    const r = await entry
+      .send('Runtime.evaluate', {
+        expression: `(function () {
+          const c = window.__ag_compat;
+          return c && typeof c.check === 'function' ? c.check() : null;
+        })()`,
+        returnByValue: true
+      })
+      .catch(() => null);
+    snapshots.push(r?.result?.result?.value || null);
+  }
+  return mergeCompatSnapshots(snapshots);
+}
+
 async function runVerifyOnce() {
   await sync({ readOnly: true });
   const inspectLiveStyles = async () => {
@@ -4456,6 +4503,8 @@ async function runVerifyOnce() {
     }
   }
 
+  const compat = await collectLiveCompat();
+
   for (const [, entry] of attachedTargets.entries()) {
     try {
       entry.ws.close();
@@ -4476,6 +4525,7 @@ async function runVerifyOnce() {
         userDir: USER_DIR,
         themeStyle,
         customStyle,
+        compat,
         live: {
           reachable,
           port: lastReachablePort || null,
@@ -4493,7 +4543,7 @@ function getCachedBootPayload() {
   return cachedBootPayloadBase;
 }
 
-export { attachedTargets, skippedNonHostTargets, sync, rebuildBundleIfNeeded, getCachedBootPayload };
+export { attachedTargets, skippedNonHostTargets, sync, rebuildBundleIfNeeded, getCachedBootPayload, mergeCompatSnapshots };
 
 const isMainModule = (() => {
   try {

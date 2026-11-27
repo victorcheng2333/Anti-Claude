@@ -911,6 +911,194 @@
     };
   }
 
+  /* Host compatibility registry.
+     Every private Antigravity surface the patch leans on (DOM hooks, React fiber props, preload bridges, Redux
+     stores) is declared once with a probe. A host upgrade that breaks one is recorded as "degraded" — shown in
+     Settings › UI Enhancements and in `node install.mjs compat` — instead of silently turning into a no-op.
+     Status semantics:
+       unseen   - the host UI that would carry this dependency has not been on screen yet (no verdict)
+       ok       - the anchor was present and the expected internal shape was found
+       degraded - the anchor was present but the expected internal shape was missing, or a call into it threw
+     Anchors keep "not rendered yet" apart from "broken", so an unopened panel never reads as a failure. */
+  const compat = (() => {
+    const entries = new Map();
+    const listeners = new Set();
+    let notifyQueued = false;
+    let lastCheckAt = 0;
+    const clip = (v) => {
+      const s = v instanceof Error ? v.message || String(v) : String(v == null ? '' : v);
+      return s.length > 240 ? `${s.slice(0, 240)}…` : s;
+    };
+    const hostVersion = () => {
+      try {
+        const c = window.__APP_CONFIG__;
+        const v = c && (c.version || c.appVersion || c.productVersion);
+        if (v) return String(v);
+      } catch {
+        /* __APP_CONFIG__ getters are host-owned; a throwing getter just means "unknown" */
+      }
+      const m = /\bAntigravity\/([\w.-]+)/i.exec((typeof navigator === 'object' && navigator.userAgent) || '');
+      return m ? m[1] : '';
+    };
+    const ensure = (id) => {
+      let e = entries.get(id);
+      if (!e) {
+        e = {
+          id,
+          label: id,
+          kind: 'other',
+          features: [],
+          anchor: null,
+          probe: null,
+          status: 'unseen',
+          reason: '',
+          okCount: 0,
+          failCount: 0,
+          lastAt: 0,
+          warned: false
+        };
+        entries.set(id, e);
+      }
+      return e;
+    };
+    const notify = () => {
+      if (notifyQueued || listeners.size === 0) return;
+      notifyQueued = true;
+      Promise.resolve().then(() => {
+        notifyQueued = false;
+        const snap = api.snapshot();
+        for (const fn of Array.from(listeners)) {
+          try {
+            fn(snap);
+          } catch (err) {
+            console.warn('[Anti-Claude] compat listener failed:', err);
+          }
+        }
+      });
+    };
+    const setStatus = (e, status, reason) => {
+      const changed = e.status !== status || (status === 'degraded' && e.reason !== reason);
+      e.status = status;
+      e.reason = status === 'degraded' ? reason : '';
+      e.lastAt = Date.now();
+      if (status === 'ok') {
+        e.okCount++;
+        e.warned = false;
+      } else if (status === 'degraded') {
+        e.failCount++;
+        if (!e.warned) {
+          e.warned = true;
+          console.warn(`[Anti-Claude] host dependency degraded: ${e.id} — ${reason}`);
+        }
+      }
+      if (changed) notify();
+    };
+    const api = {
+      define(id, spec) {
+        const e = ensure(String(id));
+        const s = spec && typeof spec === 'object' ? spec : {};
+        if (s.label) e.label = String(s.label);
+        if (s.kind) e.kind = String(s.kind);
+        if (Array.isArray(s.features)) e.features = s.features.map(String);
+        e.anchor = typeof s.anchor === 'function' ? s.anchor : null;
+        e.probe = typeof s.probe === 'function' ? s.probe : null;
+        notify();
+        return api;
+      },
+      ok(id) {
+        setStatus(ensure(String(id)), 'ok', '');
+        return true;
+      },
+      fail(id, reason) {
+        setStatus(ensure(String(id)), 'degraded', clip(reason) || 'unknown');
+        return false;
+      },
+      /* Call-site report: `found` true/false once the caller has confirmed the anchor is on screen */
+      report(id, found, reason) {
+        return found ? api.ok(id) : api.fail(id, reason || 'expected host internals not found');
+      },
+      status(id) {
+        const e = entries.get(String(id));
+        return e ? e.status : 'unseen';
+      },
+      probe(id) {
+        const e = entries.get(String(id));
+        if (!e || (!e.anchor && !e.probe)) return e ? e.status : 'unseen';
+        let anchor = true;
+        try {
+          if (e.anchor) anchor = e.anchor();
+        } catch (err) {
+          api.fail(e.id, err);
+          return e.status;
+        }
+        if (!anchor) return e.status;
+        if (!e.probe) {
+          api.ok(e.id);
+          return e.status;
+        }
+        let res;
+        try {
+          res = e.probe(anchor);
+        } catch (err) {
+          api.fail(e.id, err);
+          return e.status;
+        }
+        if (res === undefined || res === null) return e.status; /* probe abstained */
+        if (res === true) api.ok(e.id);
+        else if (res && typeof res === 'object' && 'ok' in res) api.report(e.id, Boolean(res.ok), res.reason);
+        else api.fail(e.id, typeof res === 'string' ? res : 'expected host internals not found');
+        return e.status;
+      },
+      check() {
+        lastCheckAt = Date.now();
+        for (const id of Array.from(entries.keys())) api.probe(id);
+        return api.snapshot();
+      },
+      degradedFeatures() {
+        const out = new Set();
+        for (const e of entries.values()) {
+          if (e.status === 'degraded') for (const f of e.features) out.add(f);
+        }
+        return out;
+      },
+      snapshot() {
+        const list = Array.from(entries.values()).map((e) => ({
+          id: e.id,
+          label: e.label,
+          kind: e.kind,
+          features: e.features.slice(),
+          status: e.status,
+          reason: e.reason,
+          okCount: e.okCount,
+          failCount: e.failCount,
+          lastAt: e.lastAt
+        }));
+        return {
+          patchVersion: PATCH_VERSION,
+          hostVersion: hostVersion(),
+          checkedAt: lastCheckAt,
+          counts: {
+            ok: list.filter((e) => e.status === 'ok').length,
+            degraded: list.filter((e) => e.status === 'degraded').length,
+            unseen: list.filter((e) => e.status === 'unseen').length
+          },
+          degraded: list.filter((e) => e.status === 'degraded').map((e) => e.id),
+          entries: list
+        };
+      },
+      subscribe(fn) {
+        if (typeof fn !== 'function') return () => {};
+        listeners.add(fn);
+        return () => listeners.delete(fn);
+      }
+    };
+    return api;
+  })();
+  window.__ag_compat = compat;
+  window.__ag_cleanup_fns.push(() => {
+    if (window.__ag_compat === compat) window.__ag_compat = null;
+  });
+
   /* Execute user/custom.js with unified ctx */
   window.__AG_PATCH_CTX__ = {
     version: PATCH_VERSION,
@@ -925,6 +1113,7 @@
     },
     syncPreset: syncThemeMode,
     ensureMetricsPill,
+    compat,
     onCleanup(fn) {
       if (typeof fn === 'function') {
         window.__ag_cleanup_fns.push(fn);

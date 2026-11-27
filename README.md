@@ -25,8 +25,11 @@ node ~/Developer/Anti-Claude/install.mjs install
 node ~/Developer/Anti-Claude/install.mjs install --cli-only    # 仅安装 Antigravity CLI (agy) 支持（跨平台免桌面端）
 node ~/Developer/Anti-Claude/install.mjs sync-upgrade --force  # 拉取更新并热重载
 node ~/Developer/Anti-Claude/install.mjs doctor                # 检查各层状态（含桌面端与 CLI）
+node ~/Developer/Anti-Claude/install.mjs compat                # Antigravity 升级后检查哪些功能失效（需客户端在运行）
 node ~/Developer/Anti-Claude/install.mjs uninstall             # 卸载并还原原配置
 ```
+
+Antigravity 升级后如果某个功能不生效，打开「设置 → 界面增强」拉到底部的「兼容性」，能看到哪些依赖已失效、影响哪些功能，以及失效原因；「复制诊断信息」可以直接贴给维护者。自动更新检测到 Antigravity 版本变化时也会跑同样的检查，结果写进同步日志。
 
 ## 改了什么
 

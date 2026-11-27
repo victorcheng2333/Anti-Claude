@@ -25,8 +25,11 @@ Common commands:
 node ~/Developer/Anti-Claude/install.mjs install --cli-only    # Antigravity CLI (agy) only — macOS / Linux / Windows
 node ~/Developer/Anti-Claude/install.mjs sync-upgrade --force  # Pull updates and hot-reload
 node ~/Developer/Anti-Claude/install.mjs doctor                # Inspect health of all layers (Desktop & CLI)
+node ~/Developer/Anti-Claude/install.mjs compat                # After an Antigravity update: which features broke (app must be running)
 node ~/Developer/Anti-Claude/install.mjs uninstall             # Uninstall and restore original config
 ```
+
+If a feature stops working after an Antigravity update, open Settings → UI Enhancements and scroll to **Compatibility**: it lists which host dependencies are broken, which features they affect, and why. **Copy diagnostics** gives a report you can paste to the maintainer. The auto-updater runs the same check when it detects a new Antigravity version and records the result in the sync log.
 
 ## What Changes
 
