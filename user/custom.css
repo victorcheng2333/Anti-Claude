@@ -2855,6 +2855,14 @@ html:not([data-ag-theme-mode="dark"]) body:not(.dark) .ag-claude-folder-badge[da
   }
 }
 
+/* 隐藏侧栏对话行悬停操作区中的「Stop execution」按钮，防止切换对话或点置顶/更多时误点中止正在运行的任务 */
+.agy-row-actions > button[aria-label="Stop execution" i],
+.agy-row-actions > button[data-ag-i18n-orig-aria-label="Stop execution" i],
+.agy-row-actions > button[aria-label="停止执行"],
+.agy-row-actions > button:has(> svg > path[d^="M330-330H630V-630H330v300Z"]) {
+  display: none !important;
+}
+
 /* 顶部最近对话区块：使下方虚拟列表自适应高度（compact 模式） */
 #ag-claude-recent-section[data-mode="compact"] + div {
   height: auto !important;
