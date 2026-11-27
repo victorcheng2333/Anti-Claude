@@ -4755,6 +4755,14 @@
     '<svg viewBox="0 0 16 16" width="13" height="13" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M11.3 2.7l2 2-7.8 7.8-2.6.6.6-2.6 7.8-7.8z"/></svg>';
   const RECENT_ZH_TITLE_SVG =
     '<svg viewBox="0 0 16 16" width="13" height="13" fill="none" stroke="currentColor" stroke-width="1.35" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M2.5 4h5.5M5.2 2.5V4M3.3 4c.4 2.1 1.4 3.9 3.1 5.2M7.2 4c-.5 2.2-1.7 4-3.7 5.3"/><path d="M9.4 13l2.2-6.2L13.8 13M10.1 11h3"/></svg>';
+  const RECENT_UNREAD_SVG =
+    '<svg viewBox="0 0 16 16" width="13" height="13" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="8" cy="8" r="5.2"/><circle cx="8" cy="8" r="2" fill="currentColor" stroke="none"/></svg>';
+  const RECENT_COPY_SVG =
+    '<svg viewBox="0 0 16 16" width="13" height="13" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="5.2" y="5.2" width="8.2" height="8.2" rx="1.4"/><path d="M10.8 5.2V3.8a1.4 1.4 0 0 0-1.4-1.4H3.8a1.4 1.4 0 0 0-1.4 1.4v5.6a1.4 1.4 0 0 0 1.4 1.4h1.4"/></svg>';
+  const RECENT_SPLIT_SVG =
+    '<svg viewBox="0 0 16 16" width="13" height="13" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="2.2" y="2.6" width="11.6" height="10.8" rx="1.6"/><path d="M8 2.6v10.8"/></svg>';
+  const RECENT_CHEVRON_SVG =
+    '<svg class="ag-rm-chevron" viewBox="0 0 16 16" width="11" height="11" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 3.5L10.5 8 6 12.5"/></svg>';
   const RECENT_ARCHIVE_SVG =
     '<svg viewBox="0 0 16 16" width="13" height="13" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="2.2" y="3" width="11.6" height="2.8" rx="0.8"/><path d="M3.2 5.8v6.4a1 1 0 0 0 1 1h7.6a1 1 0 0 0 1-1V5.8"/><path d="M6.4 8.8h3.2"/></svg>';
   const RECENT_TRASH_SVG =
@@ -5732,6 +5740,76 @@
     }
   }
 
+  function copyTextToClipboard(text, noticeMsg) {
+    const val = String(text ?? '');
+    if (!val) return;
+    const notify = () => {
+      if (noticeMsg) showProjectsFloatingNotice(noticeMsg);
+    };
+    const fallback = () => {
+      try {
+        const ta = document.createElement('textarea');
+        ta.value = val;
+        ta.setAttribute('readonly', '');
+        ta.style.cssText = 'position:fixed;left:-9999px;top:-9999px;opacity:0;';
+        document.body.appendChild(ta);
+        ta.select();
+        document.execCommand('copy');
+        ta.remove();
+        notify();
+      } catch {}
+    };
+    if (typeof navigator !== 'undefined' && navigator.clipboard && typeof navigator.clipboard.writeText === 'function') {
+      navigator.clipboard.writeText(val).then(notify, fallback);
+    } else {
+      fallback();
+    }
+  }
+
+  function findMultiConvoPaneIdByCascade(node, cid) {
+    if (!node || !cid) return null;
+    if (node.type === 'pane') {
+      return node.cascadeId === cid ? node.id || null : null;
+    }
+    if (Array.isArray(node.children)) {
+      for (const ch of node.children) {
+        const hit = findMultiConvoPaneIdByCascade(ch, cid);
+        if (hit) return hit;
+      }
+    }
+    return null;
+  }
+
+  function triggerRecentConversationSplit(id, action, bindings) {
+    const store = (bindings && bindings.store) || sidebarStoreRef;
+    if (!id || !store || typeof store.dispatch !== 'function' || typeof store.getState !== 'function') return false;
+    const mcl = store.getState()?.multiConvoLayout;
+    const existingPaneId = findMultiConvoPaneIdByCascade(mcl && mcl.rootNode, id);
+    const targetPaneId = existingPaneId || (mcl && mcl.focusedPaneId) || 'pane-1';
+    if (action === 'split-right') {
+      store.dispatch({
+        type: 'multiConvoLayout/splitPane',
+        payload: { targetPaneId, cascadeId: existingPaneId ? '_new' : id, direction: 'horizontal' }
+      });
+      return true;
+    }
+    if (action === 'split-down') {
+      store.dispatch({
+        type: 'multiConvoLayout/splitPane',
+        payload: { targetPaneId, cascadeId: existingPaneId ? '_new' : id, direction: 'vertical' }
+      });
+      return true;
+    }
+    if (action === 'split-replace' && existingPaneId) {
+      store.dispatch({
+        type: 'multiConvoLayout/resetPane',
+        payload: { paneId: existingPaneId, cascadeId: '_new' }
+      });
+      return true;
+    }
+    return false;
+  }
+
   async function deleteRecentConversation(id, bindings) {
     const act = getSidebarActionsCtx(bindings);
     if (!id || !act || typeof act.deleteCascadeTrajectory !== 'function') return false;
@@ -5747,8 +5825,23 @@
     }
   }
 
+  let recentSubmenuKind = '';
+
+  function closeRecentRowSubmenu() {
+    recentSubmenuKind = '';
+    const sub = document.getElementById('ag-recent-row-submenu');
+    if (sub) sub.remove();
+    const menu = document.getElementById('ag-recent-row-menu');
+    if (menu) {
+      menu.querySelectorAll('[data-ag-rm-sub][data-sub-open="true"]').forEach((el) => {
+        el.removeAttribute('data-sub-open');
+      });
+    }
+  }
+
   function closeRecentRowMenu() {
     recentMenuState = null;
+    closeRecentRowSubmenu();
     const menu = document.getElementById('ag-recent-row-menu');
     if (menu) menu.remove();
     if (recentMenuDocBound) {
@@ -5761,7 +5854,7 @@
 
   function onRecentMenuDocDown(ev) {
     const t = ev && ev.target;
-    if (t && t.closest && t.closest('#ag-recent-row-menu, [data-ag-recent-menu]')) return;
+    if (t && t.closest && t.closest('#ag-recent-row-menu, #ag-recent-row-submenu, [data-ag-recent-menu]')) return;
     closeRecentRowMenu();
   }
 
@@ -5984,19 +6077,129 @@
     syncSidebarEnhancements();
   }
 
+  function renderRecentRowSubmenu(kind, anchorEl) {
+    const st = recentMenuState;
+    if (!st || !kind || !anchorEl) {
+      closeRecentRowSubmenu();
+      return;
+    }
+    recentSubmenuKind = kind;
+    const parentMenu = document.getElementById('ag-recent-row-menu');
+    if (parentMenu) {
+      parentMenu.querySelectorAll('[data-ag-rm-sub]').forEach((el) => {
+        if (el.getAttribute('data-ag-rm-sub') === kind) el.setAttribute('data-sub-open', 'true');
+        else el.removeAttribute('data-sub-open');
+      });
+    }
+    let sub = document.getElementById('ag-recent-row-submenu');
+    if (!sub) {
+      sub = document.createElement('div');
+      sub.id = 'ag-recent-row-submenu';
+      sub.setAttribute('role', 'menu');
+      sub.setAttribute('data-ag-i18n-ignore', '1');
+      sub.addEventListener('click', (ev) => {
+        const btn = ev.target && ev.target.closest && ev.target.closest('[data-ag-rm-act]');
+        if (!btn || !recentMenuState) return;
+        ev.preventDefault();
+        ev.stopPropagation();
+        const act = btn.getAttribute('data-ag-rm-act');
+        const cur = recentMenuState;
+        const bindings = findSidebarBindings();
+        if (act === 'copy-name') {
+          closeRecentRowMenu();
+          copyTextToClipboard(cur.title, L('已复制对话名称', 'Copied conversation name'));
+          return;
+        }
+        if (act === 'copy-id') {
+          closeRecentRowMenu();
+          copyTextToClipboard(cur.id, L('已复制对话 ID', 'Copied conversation ID'));
+          return;
+        }
+        if (act === 'copy-project') {
+          closeRecentRowMenu();
+          copyTextToClipboard(cur.projectName, L('已复制项目名称', 'Copied project name'));
+          return;
+        }
+        if (act === 'split-right' || act === 'split-down' || act === 'split-replace') {
+          closeRecentRowMenu();
+          triggerRecentConversationSplit(cur.id, act, bindings);
+        }
+      });
+      document.body.appendChild(sub);
+    }
+
+    if (kind === 'copy') {
+      sub.innerHTML =
+        `<button type="button" class="ag-rm-item" data-ag-rm-act="copy-name"><span class="ag-rm-label">${escapeHtml(L('对话名称', 'Conversation Name'))}</span></button>` +
+        `<button type="button" class="ag-rm-item" data-ag-rm-act="copy-id"><span class="ag-rm-label">${escapeHtml(L('对话 ID', 'Conversation ID'))}</span></button>` +
+        (st.projectName
+          ? `<button type="button" class="ag-rm-item" data-ag-rm-act="copy-project"><span class="ag-rm-label">${escapeHtml(L('项目名称', 'Project Name'))}</span></button>`
+          : '');
+    } else if (kind === 'split') {
+      const bindings = findSidebarBindings();
+      const store = (bindings && bindings.store) || sidebarStoreRef;
+      const inPane = Boolean(
+        store &&
+          typeof store.getState === 'function' &&
+          findMultiConvoPaneIdByCascade(store.getState()?.multiConvoLayout?.rootNode, st.id)
+      );
+      sub.innerHTML =
+        `<button type="button" class="ag-rm-item" data-ag-rm-act="split-right"><span class="ag-rm-label">${escapeHtml(L('向右分屏', 'Split Right'))}</span></button>` +
+        `<button type="button" class="ag-rm-item" data-ag-rm-act="split-down"><span class="ag-rm-label">${escapeHtml(L('向下分屏', 'Split Down'))}</span></button>` +
+        (inPane
+          ? `<button type="button" class="ag-rm-item" data-ag-rm-act="split-replace"><span class="ag-rm-label">${escapeHtml(L('替换为新对话', 'Replace with New'))}</span></button>`
+          : '');
+    }
+
+    const ar = anchorEl.getBoundingClientRect();
+    const pr = parentMenu ? parentMenu.getBoundingClientRect() : ar;
+    const subW = Math.max(168, sub.offsetWidth || 184);
+    const subH = Math.max(70, sub.offsetHeight || 104);
+    const vw = window.innerWidth || 1200;
+    const vh = window.innerHeight || 800;
+    let left = pr.right + 4;
+    if (left + subW > vw - 8) left = Math.max(8, pr.left - subW - 4);
+    const top = Math.min(Math.max(8, ar.top - 4), Math.max(8, vh - subH - 8));
+    sub.style.left = `${Math.round(left)}px`;
+    sub.style.top = `${Math.round(top)}px`;
+  }
+
   function renderRecentRowMenu() {
     const st = recentMenuState;
     if (!st) {
       closeRecentRowMenu();
       return;
     }
+    closeRecentRowSubmenu();
     let menu = document.getElementById('ag-recent-row-menu');
     if (!menu) {
       menu = document.createElement('div');
       menu.id = 'ag-recent-row-menu';
       menu.setAttribute('role', 'menu');
       menu.setAttribute('data-ag-i18n-ignore', '1');
+      menu.addEventListener('mouseover', (ev) => {
+        const subBtn = ev.target && ev.target.closest && ev.target.closest('[data-ag-rm-sub]');
+        if (subBtn && !subBtn.disabled) {
+          const kind = subBtn.getAttribute('data-ag-rm-sub');
+          if (kind && (recentSubmenuKind !== kind || !document.getElementById('ag-recent-row-submenu'))) {
+            renderRecentRowSubmenu(kind, subBtn);
+          }
+          return;
+        }
+        const itemBtn = ev.target && ev.target.closest && ev.target.closest('.ag-rm-item');
+        if (itemBtn && !itemBtn.hasAttribute('data-ag-rm-sub')) {
+          closeRecentRowSubmenu();
+        }
+      });
       menu.addEventListener('click', (ev) => {
+        const subBtn = ev.target && ev.target.closest && ev.target.closest('[data-ag-rm-sub]');
+        if (subBtn && !subBtn.disabled) {
+          ev.preventDefault();
+          ev.stopPropagation();
+          const kind = subBtn.getAttribute('data-ag-rm-sub');
+          if (kind) renderRecentRowSubmenu(kind, subBtn);
+          return;
+        }
         const btn = ev.target && ev.target.closest && ev.target.closest('[data-ag-rm-act]');
         if (!btn || !recentMenuState) return;
         ev.preventDefault();
@@ -6012,6 +6215,11 @@
         if (act === 'pin') {
           closeRecentRowMenu();
           mutateRecentConversationAnnotation(cur.id, { pinned: true }, bindings);
+          return;
+        }
+        if (act === 'unread') {
+          closeRecentRowMenu();
+          mutateRecentConversationAnnotation(cur.id, { markedAsUnread: true }, bindings);
           return;
         }
         if (act === 'rename') {
@@ -6041,7 +6249,9 @@
       document.body.appendChild(menu);
     }
 
-    const canMutate = Boolean(getSidebarActionsCtx(findSidebarBindings()));
+    const bindings = findSidebarBindings();
+    const canMutate = Boolean(getSidebarActionsCtx(bindings));
+    const canSplit = Boolean(((bindings && bindings.store) || sidebarStoreRef)?.dispatch);
     const projPart =
       st.projectName && st.projectId && FEAT.projects
         ? `<button type="button" class="ag-rm-item ag-rm-project" data-ag-rm-act="open-project" title="${escapeHtml(L('打开所属项目', 'Open project'))}">${RECENT_FOLDER_SVG}<span class="ag-rm-label">${escapeHtml(st.projectName)}</span></button><div class="ag-rm-sep"></div>`
@@ -6054,11 +6264,15 @@
       : '';
     menu.innerHTML =
       projPart +
-      `<button type="button" class="ag-rm-item" data-ag-rm-act="pin"${canMutate ? '' : ' disabled'}>${RECENT_PIN_SVG}<span class="ag-rm-label">${escapeHtml(L('置顶对话', 'Pin'))}</span></button>` +
       `<button type="button" class="ag-rm-item" data-ag-rm-act="rename"${canMutate ? '' : ' disabled'}>${RECENT_RENAME_SVG}<span class="ag-rm-label">${escapeHtml(L('重命名', 'Rename'))}</span></button>` +
+      `<button type="button" class="ag-rm-item" data-ag-rm-act="pin"${canMutate ? '' : ' disabled'}>${RECENT_PIN_SVG}<span class="ag-rm-label">${escapeHtml(L('置顶对话', 'Pin'))}</span></button>` +
+      `<button type="button" class="ag-rm-item" data-ag-rm-act="unread"${canMutate ? '' : ' disabled'}>${RECENT_UNREAD_SVG}<span class="ag-rm-label">${escapeHtml(L('标为未读', 'Mark Unread'))}</span></button>` +
       zhTitleItemHtml +
-      `<button type="button" class="ag-rm-item" data-ag-rm-act="archive"${canMutate ? '' : ' disabled'}>${RECENT_ARCHIVE_SVG}<span class="ag-rm-label">${escapeHtml(L('归档', 'Archive'))}</span></button>` +
       `<div class="ag-rm-sep"></div>` +
+      `<button type="button" class="ag-rm-item" data-ag-rm-sub="copy">${RECENT_COPY_SVG}<span class="ag-rm-label">${escapeHtml(L('复制', 'Copy'))}</span>${RECENT_CHEVRON_SVG}</button>` +
+      `<button type="button" class="ag-rm-item" data-ag-rm-sub="split"${canSplit ? '' : ' disabled'}>${RECENT_SPLIT_SVG}<span class="ag-rm-label">${escapeHtml(L('分屏', 'Split'))}</span>${RECENT_CHEVRON_SVG}</button>` +
+      `<div class="ag-rm-sep"></div>` +
+      `<button type="button" class="ag-rm-item" data-ag-rm-act="archive"${canMutate ? '' : ' disabled'}>${RECENT_ARCHIVE_SVG}<span class="ag-rm-label">${escapeHtml(L('归档', 'Archive'))}</span></button>` +
       `<button type="button" class="ag-rm-item ag-rm-danger" data-ag-rm-act="delete" data-confirm="${st.confirmDelete ? '1' : '0'}"${canMutate ? '' : ' disabled'}>${RECENT_TRASH_SVG}<span class="ag-rm-label">${escapeHtml(delLabel)}</span></button>`;
 
     const menuW = 196;
@@ -6267,7 +6481,6 @@
         sec.querySelectorAll('[data-dragging="true"]').forEach((n) => n.removeAttribute('data-dragging'));
       });
       sec.addEventListener('contextmenu', (ev) => {
-        if (sec.getAttribute('data-mode') !== 'unified') return;
         const row = ev.target && ev.target.closest && ev.target.closest('[data-ag-recent-id]');
         if (!row) return;
         const cid = row.getAttribute('data-ag-recent-id');
@@ -6353,7 +6566,7 @@
         ? `<div class="ag-recent-list">${items
             .map((it) => {
               const isAct = it.id === activeId;
-              const isRenaming = isUnified && recentRenamingId === it.id;
+              const isRenaming = recentRenamingId === it.id;
               const age = formatRelativeAge(it.updatedAt, nowSec);
               let sideHtml = `<span>${escapeHtml(age)}</span>`;
               if (it.status && it.status.kind === 'pending') {
@@ -6451,9 +6664,9 @@
    *       text nodes & title/placeholder/aria-label attributes with zero page reload.
    * ========================================================================== */
   const UX_I18N_BASE_EXCLUDE =
-    'code, pre, kbd, samp, textarea, input, style, script, noscript, [contenteditable="true"], [data-markdown-root], [data-testid="user-message-content"], .agy-user-bubble, [data-testid="skill-scope-item-pill"], bdi.context-scope-mention, .monaco-editor, .monaco-diff-editor, .xterm, [class*="onyx-key"], .prose, .markdown, [class*="chat-message"], [class*="group/file-title"], [data-testid="conversation-row-sidebar"] a[href^="/c/"], [data-testid="conversation-row-sidebar"] span.truncate, [data-testid="conversation-navigator-turn"], .msg-body, #raw, #swarm-title, #ag-live-metrics-pill, #ag-live-metrics-tooltip, [data-ag-i18n-ignore="1"], #ag-claude-model-popover, #ag-claude-model-subpop, #ag-claude-model-tripop, #ag-claude-quota-popover, #ag-claude-ux-settings-nav, #ag-claude-ux-settings-panel, #ag-claude-recent-section, #ag-recent-row-menu, #ag-project-action-menu, [data-testid="model-selector-trigger"], [data-testid="permissions-selector-trigger"]';
+    'code, pre, kbd, samp, textarea, input, style, script, noscript, [contenteditable="true"], [data-markdown-root], [data-testid="user-message-content"], .agy-user-bubble, [data-testid="skill-scope-item-pill"], bdi.context-scope-mention, .monaco-editor, .monaco-diff-editor, .xterm, [class*="onyx-key"], .prose, .markdown, [class*="chat-message"], [class*="group/file-title"], [data-testid="conversation-row-sidebar"] a[href^="/c/"], [data-testid="conversation-row-sidebar"] span.truncate, [data-testid="conversation-navigator-turn"], .msg-body, #raw, #swarm-title, #ag-live-metrics-pill, #ag-live-metrics-tooltip, [data-ag-i18n-ignore="1"], #ag-claude-model-popover, #ag-claude-model-subpop, #ag-claude-model-tripop, #ag-claude-quota-popover, #ag-claude-ux-settings-nav, #ag-claude-ux-settings-panel, #ag-claude-recent-section, #ag-recent-row-menu, #ag-recent-row-submenu, #ag-project-action-menu, [data-testid="model-selector-trigger"], [data-testid="permissions-selector-trigger"]';
   const UX_I18N_ATTR_EXCLUDE =
-    'code, pre, kbd, samp, style, script, noscript, [data-markdown-root], [data-testid="user-message-content"], .agy-user-bubble, [data-testid="skill-scope-item-pill"], bdi.context-scope-mention, .monaco-editor, .monaco-diff-editor, .xterm, #ag-live-metrics-pill, #ag-live-metrics-tooltip, [data-ag-i18n-ignore="1"], #ag-claude-model-popover, #ag-claude-model-subpop, #ag-claude-model-tripop, #ag-claude-quota-popover, #ag-claude-ux-settings-nav, #ag-claude-ux-settings-panel, #ag-claude-recent-section, #ag-recent-row-menu, #ag-project-action-menu, [data-testid="model-selector-trigger"], [data-testid="permissions-selector-trigger"]';
+    'code, pre, kbd, samp, style, script, noscript, [data-markdown-root], [data-testid="user-message-content"], .agy-user-bubble, [data-testid="skill-scope-item-pill"], bdi.context-scope-mention, .monaco-editor, .monaco-diff-editor, .xterm, #ag-live-metrics-pill, #ag-live-metrics-tooltip, [data-ag-i18n-ignore="1"], #ag-claude-model-popover, #ag-claude-model-subpop, #ag-claude-model-tripop, #ag-claude-quota-popover, #ag-claude-ux-settings-nav, #ag-claude-ux-settings-panel, #ag-claude-recent-section, #ag-recent-row-menu, #ag-recent-row-submenu, #ag-project-action-menu, [data-testid="model-selector-trigger"], [data-testid="permissions-selector-trigger"]';
   let uxI18nObserver = null;
   let uxI18nFlushTimer = 0;
   let uxI18nDirtyRoots = new Set();
@@ -6971,7 +7184,7 @@
     if (!el || !el.closest) return;
     if (
       el.closest(
-        'input, textarea, [contenteditable="true"], .monaco-editor, .monaco-diff-editor, .xterm, #ag-recent-row-menu, #ag-project-action-menu, #ag-claude-model-popover, #ag-claude-model-subpop, #ag-claude-model-tripop'
+        'input, textarea, [contenteditable="true"], .monaco-editor, .monaco-diff-editor, .xterm, #ag-recent-row-menu, #ag-recent-row-submenu, #ag-project-action-menu, #ag-claude-model-popover, #ag-claude-model-subpop, #ag-claude-model-tripop'
       )
     ) {
       return;
@@ -9745,7 +9958,7 @@
         !el ||
         !el.isConnected ||
         el.closest(
-          '#ag-claude-project-modal, #ag-claude-projects-view, #ag-claude-model-popover, #ag-claude-model-subpop, #ag-claude-model-tripop, #ag-claude-quota-popover, #ag-recent-row-menu, #ag-project-action-menu'
+          '#ag-claude-project-modal, #ag-claude-projects-view, #ag-claude-model-popover, #ag-claude-model-subpop, #ag-claude-model-tripop, #ag-claude-quota-popover, #ag-recent-row-menu, #ag-recent-row-submenu, #ag-project-action-menu'
         )
       ) {
         continue;
@@ -9794,7 +10007,7 @@
     }
     if (
       t.closest(
-        '#ag-claude-projects-nav-btn, #ag-claude-projects-view, #ag-claude-project-modal, #ag-claude-model-popover, #ag-claude-model-subpop, #ag-claude-model-tripop, #ag-recent-row-menu, #ag-project-action-menu, .agy-dialog, [role="dialog"]'
+        '#ag-claude-projects-nav-btn, #ag-claude-projects-view, #ag-claude-project-modal, #ag-claude-model-popover, #ag-claude-model-subpop, #ag-claude-model-tripop, #ag-recent-row-menu, #ag-recent-row-submenu, #ag-project-action-menu, .agy-dialog, [role="dialog"]'
       )
     ) {
       return;
@@ -14174,7 +14387,7 @@
   }
 
   const OWN_SEL =
-    '.ag-collapse-ghost, .ag-orbit-dots, .ag-elapsed-timer, #ag-claude-ctx-ring, #ag-claude-quota-popover, #ag-claude-model-popover, #ag-claude-model-subpop, #ag-claude-model-tripop, .ag-claude-inline-editor, .ag-claude-folder-badges, #ag-claude-recent-section, #ag-recent-row-menu, #ag-project-action-menu, #ag-claude-ux-settings-nav, #ag-claude-ux-settings-panel, #ag-settings-stats-wrap, .ag-settings-subhdr-chev, #ag-claude-projects-nav-btn, #ag-claude-projects-view, #ag-claude-project-modal, .ag-code-fold-toggle, .ag-code-fold-bar, #ag-claude-ov-sections';
+    '.ag-collapse-ghost, .ag-orbit-dots, .ag-elapsed-timer, #ag-claude-ctx-ring, #ag-claude-quota-popover, #ag-claude-model-popover, #ag-claude-model-subpop, #ag-claude-model-tripop, .ag-claude-inline-editor, .ag-claude-folder-badges, #ag-claude-recent-section, #ag-recent-row-menu, #ag-recent-row-submenu, #ag-project-action-menu, #ag-claude-ux-settings-nav, #ag-claude-ux-settings-panel, #ag-settings-stats-wrap, .ag-settings-subhdr-chev, #ag-claude-projects-nav-btn, #ag-claude-projects-view, #ag-claude-project-modal, .ag-code-fold-toggle, .ag-code-fold-bar, #ag-claude-ov-sections';
   const CLASS_WATCH_SEL =
     '[id="antigravity.agentSidePanelInputBox"], [data-testid="tool-group-collapsible"], [data-testid="worked-for-collapsible"], [data-testid="progress-updates-collapsible"], [data-testid="ephemeral-tool-status"]';
 
