@@ -2855,7 +2855,7 @@ html:not([data-ag-theme-mode="dark"]) body:not(.dark) .ag-claude-folder-badge[da
   }
 }
 
-/* 隐藏侧栏对话行悬停操作区中易误点的「Stop execution」与「Archive conversation」按钮（保留置顶与「⋮」更多菜单，归档可从菜单操作） */
+/* 精简侧栏对话行悬停操作区：隐藏易误点/冗余的 Stop、Archive 与 Pin 悬停按钮，仅保留单个「⋮」更多菜单（对齐 Claude Desktop 极简风格；置顶/归档/停止照旧保留在「⋮」与右键菜单内） */
 .agy-row-actions > button[aria-label="Stop execution" i],
 .agy-row-actions > button[data-ag-i18n-orig-aria-label="Stop execution" i],
 .agy-row-actions > button[aria-label="停止执行"],
@@ -2865,7 +2865,12 @@ html:not([data-ag-theme-mode="dark"]) body:not(.dark) .ag-claude-folder-badge[da
 .agy-row-actions > button[data-ag-i18n-orig-aria-label="Archive conversation" i],
 .agy-row-actions > button[aria-label="归档对话"],
 .agy-row-actions > button[aria-label="归档"],
-.agy-row-actions > button:has(> svg > path[d^="M480-256.16L626.15-402.31"]) {
+.agy-row-actions > button:has(> svg > path[d^="M480-256.16L626.15-402.31"]),
+.agy-row-actions > button[data-testid="conversation-pin-button"],
+.agy-row-actions > button[aria-label="Pin conversation" i],
+.agy-row-actions > button[aria-label="Unpin conversation" i],
+.agy-row-actions > button[data-ag-i18n-orig-aria-label="Pin conversation" i],
+.agy-row-actions > button[data-ag-i18n-orig-aria-label="Unpin conversation" i] {
   display: none !important;
 }
 
