@@ -3087,6 +3087,10 @@ html:not([data-ag-theme-mode="dark"]) body:not(.dark) #ag-claude-recent-section[
   background-color: #2F2F2D !important;
 }
 
+#ag-claude-recent-section[data-mode="compact"] .ag-recent-row {
+  padding: 0 8px 0 30px !important;
+}
+
 #ag-claude-recent-section[data-mode="compact"] .ag-recent-row[data-active="true"] {
   position: relative !important;
 }
@@ -3094,7 +3098,7 @@ html:not([data-ag-theme-mode="dark"]) body:not(.dark) #ag-claude-recent-section[
 #ag-claude-recent-section[data-mode="compact"] .ag-recent-row[data-active="true"]::before {
   content: "" !important;
   position: absolute !important;
-  left: 2px !important;
+  left: 22px !important;
   top: 50% !important;
   width: 2px !important;
   height: 14px !important;
@@ -3177,29 +3181,6 @@ html:not([data-ag-theme-mode="dark"]) body:not(.dark) #ag-claude-recent-section 
   color: #8A8984 !important;
 }
 
-#ag-claude-recent-section .ag-recent-proj {
-  display: inline-block !important;
-  max-width: 68px !important;
-  overflow: hidden !important;
-  text-overflow: ellipsis !important;
-  white-space: nowrap !important;
-  font-size: max(10px, calc(var(--ag-ui-font-size, 13px) - 2.5px)) !important;
-  line-height: 14px !important;
-  padding: 1px 5px !important;
-  border-radius: 4px !important;
-  flex-shrink: 1 !important;
-}
-
-html:not([data-ag-theme-mode="dark"]) body:not(.dark) #ag-claude-recent-section .ag-recent-proj {
-  background-color: rgba(0, 0, 0, 0.045) !important;
-  color: #7C7B76 !important;
-}
-
-:is(html[data-ag-theme-mode="dark"] body, body.dark) #ag-claude-recent-section .ag-recent-proj {
-  background-color: rgba(255, 255, 255, 0.075) !important;
-  color: #9A9994 !important;
-}
-
 #ag-claude-recent-section .ag-recent-more {
   width: 100% !important;
   height: 28px !important;
@@ -3220,6 +3201,10 @@ html:not([data-ag-theme-mode="dark"]) body:not(.dark) #ag-claude-recent-section 
   -webkit-font-smoothing: antialiased !important;
   cursor: pointer !important;
   transition: background-color 110ms ease, color 110ms ease !important;
+}
+
+#ag-claude-recent-section[data-mode="compact"] .ag-recent-more {
+  padding: 0 8px 0 30px !important;
 }
 
 html:not([data-ag-theme-mode="dark"]) body:not(.dark) #ag-claude-recent-section .ag-recent-more {
@@ -3316,6 +3301,10 @@ html:not([data-ag-theme-mode="dark"]) body:not(.dark) #ag-claude-recent-section 
   padding: 8px !important;
   font-size: 12.5px !important;
   color: #8E8D88 !important;
+}
+
+#ag-claude-recent-section[data-mode="compact"] .ag-recent-empty {
+  padding-left: 30px !important;
 }
 
 /* 右键 / ⋯ 对话与项目操作浮动菜单 */

@@ -3769,6 +3769,13 @@
     const hasMainExecRow = Boolean(mainExecCat && mainExecCat.families.length > 0);
     const execSubActive = activeModelSubmenu === 'executor' && hasMainExecRow ? ' data-active-sub="true"' : '';
     const moreSubActive = activeModelSubmenu === 'more' ? ' data-active-sub="true"' : '';
+    /* "More models" also hosts the global Executor row whenever any Orchestrator exists. Once every Orchestrator
+       is promoted to the primary list (bc105d1) the submenu can be family-less but still needed for the Executor
+       picker, so gate it on content rather than on moreFamilies alone, and drop the row when it would be empty. */
+    const isOrchFamily = (f) => Boolean(f && (f.isOrchestratorFamily || /orchestrator/i.test(f.baseName)));
+    const moreHasOrch = cat.moreFamilies.some((x) => x.group === 'orch') || cat.primaryFamilies.some(isOrchFamily);
+    const moreExecCat = mainExecCat || (moreHasOrch ? buildExecutorCatalog(api) : null);
+    const moreHasContent = cat.moreFamilies.length > 0 || Boolean(moreExecCat && moreExecCat.families.length > 0);
 
     const rawTooltipNote = typeof api?.tooltipNote === 'string' ? api.tooltipNote.trim() : '';
     const tooltipNoteText =
@@ -3807,7 +3814,9 @@
       </button>`
           : ''
       }
-      <button type="button" class="ag-cm-row" data-ag-cm-hover="more" data-ag-cm-subtrigger="more"${moreSubActive}>
+      ${
+        moreHasContent
+          ? `<button type="button" class="ag-cm-row" data-ag-cm-hover="more" data-ag-cm-subtrigger="more"${moreSubActive}>
         <span style="display:inline-flex;align-items:center;gap:6px;">
           <span>${L('更多模型', 'More models')}</span>
           ${activeInMore ? '<span class="ag-cm-dot"></span>' : ''}
@@ -3815,7 +3824,9 @@
         <span class="ag-cm-right">
           ${SVG_CM_CHEVRON}
         </span>
-      </button>
+      </button>`
+          : ''
+      }
       ${nativeRowHtml}
     `;
 
@@ -3843,13 +3854,10 @@
       subPop.innerHTML = renderExecutorPickerHtml(mainExecCat);
       subPop.setAttribute('data-open', 'true');
       triPop.setAttribute('data-open', 'false');
-    } else if (activeModelSubmenu === 'more' && cat.moreFamilies.length > 0) {
+    } else if (activeModelSubmenu === 'more' && moreHasContent) {
       const orchEntries = cat.moreFamilies.filter((x) => x.group === 'orch');
       const otherEntries = cat.moreFamilies.filter((x) => x.group !== 'orch');
-      const hasAnyOrch =
-        orchEntries.length > 0 ||
-        cat.primaryFamilies.some((f) => Boolean(f && (f.isOrchestratorFamily || /orchestrator/i.test(f.baseName))));
-      const execCat = hasAnyOrch ? buildExecutorCatalog(api) : null;
+      const execCat = moreExecCat;
       const hasExecRow = Boolean(execCat && execCat.families.length > 0);
       const isExecTriActive = Boolean(activeModelTrimenu && activeModelTrimenu.kind === 'executor' && hasExecRow);
 
@@ -6690,10 +6698,6 @@
                 sideHtml = `<span class="ag-claude-unread-dot"></span>${age ? `<span>${escapeHtml(age)}</span>` : ''}`;
               }
               const tip = it.project ? `${it.title}\n${L('所属项目：', 'Project: ')}${it.project}` : it.title;
-              const projTagHtml =
-                !isUnified && it.project
-                  ? `<span class="ag-recent-proj">${escapeHtml(it.project)}</span>`
-                  : '';
               const actionsHtml =
                 isUnified && !isRenaming
                   ? `<div class="ag-recent-actions"><button type="button" class="ag-recent-act-btn" data-ag-recent-pin="${escapeHtml(it.id)}" title="${escapeHtml(L('置顶对话', 'Pin'))}" aria-label="${escapeHtml(L('置顶对话', 'Pin'))}">${RECENT_PIN_SVG}</button><button type="button" class="ag-recent-act-btn" data-ag-recent-menu="${escapeHtml(it.id)}" title="${escapeHtml(L('更多选项', 'More options'))}" aria-label="${escapeHtml(L('更多选项', 'More options'))}">${RECENT_MORE_SVG}</button></div>`
@@ -6701,7 +6705,7 @@
               const mainInner = isRenaming
                 ? `<input type="text" class="ag-recent-rename-input" data-ag-recent-rename-input="${escapeHtml(it.id)}" data-orig-title="${escapeHtml(it.title)}" value="${escapeHtml(it.title)}" />`
                 : `<div class="ag-recent-title">${escapeHtml(it.title)}</div>`;
-              return `<div class="ag-recent-row" role="button" tabindex="0"${isRenaming ? '' : ' draggable="true"'} data-ag-recent-id="${escapeHtml(it.id)}" data-ag-recent-title="${escapeHtml(it.title)}" data-active="${isAct ? 'true' : 'false'}"${it.project ? ` data-has-project="true"` : ''}${isRenaming ? ' data-renaming="true"' : ''} title="${escapeHtml(tip)}"><div class="ag-recent-main">${mainInner}</div>${isRenaming ? '' : `<div class="ag-recent-side">${projTagHtml}${sideHtml}</div>${actionsHtml}`}</div>`;
+              return `<div class="ag-recent-row" role="button" tabindex="0"${isRenaming ? '' : ' draggable="true"'} data-ag-recent-id="${escapeHtml(it.id)}" data-ag-recent-title="${escapeHtml(it.title)}" data-active="${isAct ? 'true' : 'false'}"${it.project ? ` data-has-project="true"` : ''}${isRenaming ? ' data-renaming="true"' : ''} title="${escapeHtml(tip)}"><div class="ag-recent-main">${mainInner}</div>${isRenaming ? '' : `<div class="ag-recent-side">${sideHtml}</div>${actionsHtml}`}</div>`;
             })
             .join('')}</div>` + moreHtml
         : `<div class="ag-recent-empty">${escapeHtml(L('暂无最近对话', 'No recent conversations'))}</div>`;
