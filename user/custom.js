@@ -4878,6 +4878,10 @@
     '<svg viewBox="0 0 16 16" width="13" height="13" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="2.2" y="3" width="11.6" height="2.8" rx="0.8"/><path d="M3.2 5.8v6.4a1 1 0 0 0 1 1h7.6a1 1 0 0 0 1-1V5.8"/><path d="M6.4 8.8h3.2"/></svg>';
   const RECENT_TRASH_SVG =
     '<svg viewBox="0 0 16 16" width="13" height="13" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 4.5h10M6 4.5V3.3a.8.8 0 0 1 .8-.8h2.4a.8.8 0 0 1 .8.8v1.2"/><path d="M4.2 4.5l.7 8.1a1 1 0 0 0 1 .9h4.2a1 1 0 0 0 1-.9l.7-8.1"/></svg>';
+  const RECENT_HOVER_FOLDER_SVG =
+    '<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 -960 960 960" fill="currentColor" aria-hidden="true" class="ag-rhc-ico"><path d="M172.31-180Q142-180 121-201t-21-51.31V-707.69Q100-738 121-759t51.31-21H391.92l80,80H787.69Q818-700 839-679t21,51.31v375.38Q860-222 839-201t-51.31,21H172.31Zm0-60H787.69q5.39,0 8.85-3.46t3.46-8.85V-627.69q0-5.39-3.46-8.85T787.69-640H447.38l-80-80H172.31q-5.39,0-8.85,3.46T160-707.69v455.38q0,5.39 3.46,8.85t8.85,3.46ZM160-240q0,0 0-3.46t0-8.85V-707.69q0-5.39 0-8.85t0-3.46v80q0,0 0,3.46t0,8.85v375.38q0,5.39 0,8.85t0,3.46Z"/></svg>';
+  const RECENT_HOVER_CLOCK_SVG =
+    '<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 -960 960 960" fill="currentColor" aria-hidden="true" class="ag-rhc-ico"><path d="M618.92-298.92l42.15-42.15L510-492.16V-680H450v212.15L618.92-298.92ZM480.07-100q-78.84,0-148.2-29.92T211.18-211.13T129.93-331.76T100-479.93t29.92-148.2t81.21-120.68t120.63-81.25T479.93-860t148.2,29.92t120.68,81.21t81.25,120.63T860-480.07t-29.92,148.2T748.87-211.18T628.24-129.93T480.07-100ZM480-480Zm0,320q133,0 226.5-93.5T800-480T706.5-706.5T480-800T253.5-706.5T160-480t93.5,226.5T480-160Z"/></svg>';
 
   let sidebarStoreRef = null;
   let sidebarStoreUnsub = null;
@@ -4891,6 +4895,10 @@
   let recentMenuDocBound = false;
   let recentItemsById = new Map();
   let recentLastDragEndTs = 0;
+  let recentHoverTimer = 0;
+  let recentHoverRowId = '';
+  let recentHoverOpen = false;
+  let projHoverCardClearTimer = 0;
 
   /* ---- v2.34+ Conversation & File Drag-to-Composer (`application/context-scope-item-cider`) ---- */
   function buildCiderConversationPayload(id, title) {
@@ -6413,8 +6421,182 @@
     }
   }
 
+  function formatRecentHoverUpdated(updatedAtSec) {
+    if (!updatedAtSec || updatedAtSec <= 0) return '';
+    const d = new Date(updatedAtSec * 1000);
+    if (Number.isNaN(d.getTime())) return '';
+    const now = new Date();
+    const sameDay =
+      d.getFullYear() === now.getFullYear() && d.getMonth() === now.getMonth() && d.getDate() === now.getDate();
+    const sameYear = d.getFullYear() === now.getFullYear();
+    const pad2 = (n) => (n < 10 ? `0${n}` : `${n}`);
+    const fallbackTime = `${pad2(d.getHours())}:${pad2(d.getMinutes())}`;
+    if (FEAT.i18n) {
+      let time = fallbackTime;
+      try {
+        time = d.toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit', hour12: false });
+      } catch {}
+      if (sameDay) return `更新于 ${time}`;
+      if (sameYear) return `更新于 ${d.getMonth() + 1}月${d.getDate()}日 ${time}`;
+      return `更新于 ${d.getFullYear()}年${d.getMonth() + 1}月${d.getDate()}日 ${time}`;
+    }
+    let time = fallbackTime;
+    try {
+      time = d.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' });
+    } catch {}
+    if (sameDay) return `Updated ${time}`;
+    try {
+      const dateStr = sameYear
+        ? d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
+        : d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+      return `Updated ${dateStr}, ${time}`;
+    } catch {
+      const dateStr = sameYear
+        ? `${d.getMonth() + 1}/${d.getDate()}`
+        : `${d.getFullYear()}/${d.getMonth() + 1}/${d.getDate()}`;
+      return `Updated ${dateStr}, ${time}`;
+    }
+  }
+
+  function ensureRecentHoverCard() {
+    let card = document.getElementById('ag-recent-hover-card');
+    if (!card) {
+      card = document.createElement('div');
+      card.id = 'ag-recent-hover-card';
+      card.setAttribute('role', 'tooltip');
+      card.setAttribute('data-open', 'false');
+      card.setAttribute('data-ag-i18n-ignore', '1');
+      if (document.body) document.body.appendChild(card);
+    }
+    return card;
+  }
+
+  function hideRecentHoverCard(removeEl = false) {
+    if (recentHoverTimer) {
+      cancelLater(recentHoverTimer);
+      recentHoverTimer = 0;
+    }
+    recentHoverRowId = '';
+    recentHoverOpen = false;
+    const card = document.getElementById('ag-recent-hover-card');
+    if (card) {
+      if (removeEl) card.remove();
+      else card.setAttribute('data-open', 'false');
+    }
+  }
+
+  function showRecentHoverCard(rowEl, item) {
+    if (disposed || !rowEl || !item || recentMenuState || recentRenamingId) return;
+    const card = ensureRecentHoverCard();
+    if (!card || !card.isConnected) return;
+    const updatedText = formatRecentHoverUpdated(item.updatedAt);
+    const metaRows = [];
+    if (item.project) {
+      metaRows.push(
+        `<div class="ag-rhc-row">${RECENT_HOVER_FOLDER_SVG}<span class="ag-rhc-text">${escapeHtml(item.project)}</span></div>`
+      );
+    }
+    if (updatedText) {
+      metaRows.push(
+        `<div class="ag-rhc-row">${RECENT_HOVER_CLOCK_SVG}<span class="ag-rhc-text">${escapeHtml(updatedText)}</span></div>`
+      );
+    }
+    card.innerHTML =
+      `<div class="ag-rhc-title">${escapeHtml(item.title)}</div>` +
+      (metaRows.length ? `<div class="ag-rhc-meta">${metaRows.join('')}</div>` : '');
+    const rect = typeof rowEl.getBoundingClientRect === 'function' ? rowEl.getBoundingClientRect() : { left: 0, right: 0, top: 0 };
+    const cardW = card.offsetWidth || 288;
+    const cardH = card.offsetHeight || 88;
+    const vw = window.innerWidth || 1200;
+    const vh = window.innerHeight || 800;
+    let left = (rect.right || 0) + 10;
+    if (left + cardW > vw - 8) {
+      left = (rect.left || 0) - cardW - 10;
+    }
+    left = Math.min(Math.max(8, left), Math.max(8, vw - cardW - 8));
+    const top = Math.min(Math.max(8, (rect.top || 0) - 6), Math.max(8, vh - cardH - 8));
+    card.style.left = `${Math.round(left)}px`;
+    card.style.top = `${Math.round(top)}px`;
+    card.setAttribute('data-open', 'true');
+    recentHoverOpen = true;
+    recentHoverRowId = item.id;
+  }
+
+  function scheduleRecentHoverCard(rowEl) {
+    if (disposed || !rowEl) return;
+    const cid = rowEl.getAttribute('data-ag-recent-id');
+    const item = cid ? recentItemsById.get(cid) : null;
+    if (!item || recentMenuState || recentRenamingId) {
+      hideRecentHoverCard();
+      return;
+    }
+    if (recentHoverOpen && recentHoverRowId === cid) return;
+    if (recentHoverTimer) {
+      cancelLater(recentHoverTimer);
+      recentHoverTimer = 0;
+    }
+    if (recentHoverOpen) {
+      showRecentHoverCard(rowEl, item);
+      return;
+    }
+    recentHoverTimer = later(() => {
+      recentHoverTimer = 0;
+      if (disposed || !rowEl.isConnected || recentMenuState || recentRenamingId) return;
+      const latestItem = recentItemsById.get(cid) || item;
+      showRecentHoverCard(rowEl, latestItem);
+    }, 280);
+  }
+
+  function clearProjHoverCardSuppression(force = false) {
+    if (projHoverCardClearTimer) {
+      cancelLater(projHoverCardClearTimer);
+      projHoverCardClearTimer = 0;
+    }
+    if (!force && document.querySelector('[data-hover-card-popup]')) {
+      projHoverCardClearTimer = later(() => {
+        projHoverCardClearTimer = 0;
+        clearProjHoverCardSuppression(true);
+      }, 250);
+      return;
+    }
+    if (document.documentElement) {
+      document.documentElement.removeAttribute('data-ag-hide-proj-hovercard');
+    }
+  }
+
+  const onDocProjHoverPointerOver = (ev) => {
+    if (disposed) return;
+    const t = ev.target;
+    const row = t && t.closest && t.closest('[data-testid="conversation-row-sidebar"]');
+    if (row) {
+      if (projHoverCardClearTimer) {
+        cancelLater(projHoverCardClearTimer);
+        projHoverCardClearTimer = 0;
+      }
+      if (row.getAttribute('data-pinned') === 'true') {
+        if (document.documentElement) document.documentElement.removeAttribute('data-ag-hide-proj-hovercard');
+      } else if (document.documentElement) {
+        document.documentElement.setAttribute('data-ag-hide-proj-hovercard', '1');
+      }
+      return;
+    }
+    if (document.documentElement && document.documentElement.getAttribute('data-ag-hide-proj-hovercard') === '1') {
+      if (!projHoverCardClearTimer) {
+        projHoverCardClearTimer = later(() => {
+          projHoverCardClearTimer = 0;
+          clearProjHoverCardSuppression(false);
+        }, 420);
+      }
+    }
+  };
+
+  const onDocScrollHideRecentHover = () => {
+    if (recentHoverOpen || recentHoverTimer) hideRecentHoverCard();
+  };
+
   function openRecentRowMenu(item, x, y) {
     if (!item || !item.id) return;
+    hideRecentHoverCard();
     if (recentMenuState && recentMenuState.id === item.id) {
       closeRecentRowMenu();
       return;
@@ -6433,6 +6615,7 @@
 
   function removeRecentSection() {
     closeRecentRowMenu();
+    hideRecentHoverCard(true);
     recentRenamingId = '';
     const el = document.getElementById('ag-claude-recent-section');
     if (el) el.remove();
@@ -6575,6 +6758,7 @@
         }
       });
       sec.addEventListener('dragstart', (ev) => {
+        hideRecentHoverCard();
         if (
           ev.target &&
           ev.target.closest &&
@@ -6601,7 +6785,22 @@
         if (row) row.removeAttribute('data-dragging');
         sec.querySelectorAll('[data-dragging="true"]').forEach((n) => n.removeAttribute('data-dragging'));
       });
+      sec.addEventListener('mouseover', (ev) => {
+        if (ev.target && ev.target.closest && ev.target.closest('[data-ag-recent-pin], [data-ag-recent-menu], [data-ag-recent-rename-input]')) {
+          hideRecentHoverCard();
+          return;
+        }
+        const row = ev.target && ev.target.closest && ev.target.closest('.ag-recent-row[data-ag-recent-id]');
+        if (!row) {
+          hideRecentHoverCard();
+          return;
+        }
+        scheduleRecentHoverCard(row);
+      });
+      sec.addEventListener('mouseleave', () => hideRecentHoverCard());
+      sec.addEventListener('pointerdown', () => hideRecentHoverCard());
       sec.addEventListener('contextmenu', (ev) => {
+        hideRecentHoverCard();
         const row = ev.target && ev.target.closest && ev.target.closest('[data-ag-recent-id]');
         if (!row) return;
         const cid = row.getAttribute('data-ag-recent-id');
@@ -6697,7 +6896,6 @@
               } else if (it.status && it.status.kind === 'unread') {
                 sideHtml = `<span class="ag-claude-unread-dot"></span>${age ? `<span>${escapeHtml(age)}</span>` : ''}`;
               }
-              const tip = it.project ? `${it.title}\n${L('所属项目：', 'Project: ')}${it.project}` : it.title;
               const actionsHtml =
                 isUnified && !isRenaming
                   ? `<div class="ag-recent-actions"><button type="button" class="ag-recent-act-btn" data-ag-recent-pin="${escapeHtml(it.id)}" title="${escapeHtml(L('置顶对话', 'Pin'))}" aria-label="${escapeHtml(L('置顶对话', 'Pin'))}">${RECENT_PIN_SVG}</button><button type="button" class="ag-recent-act-btn" data-ag-recent-menu="${escapeHtml(it.id)}" title="${escapeHtml(L('更多选项', 'More options'))}" aria-label="${escapeHtml(L('更多选项', 'More options'))}">${RECENT_MORE_SVG}</button></div>`
@@ -6705,7 +6903,8 @@
               const mainInner = isRenaming
                 ? `<input type="text" class="ag-recent-rename-input" data-ag-recent-rename-input="${escapeHtml(it.id)}" data-orig-title="${escapeHtml(it.title)}" value="${escapeHtml(it.title)}" />`
                 : `<div class="ag-recent-title">${escapeHtml(it.title)}</div>`;
-              return `<div class="ag-recent-row" role="button" tabindex="0"${isRenaming ? '' : ' draggable="true"'} data-ag-recent-id="${escapeHtml(it.id)}" data-ag-recent-title="${escapeHtml(it.title)}" data-active="${isAct ? 'true' : 'false'}"${it.project ? ` data-has-project="true"` : ''}${isRenaming ? ' data-renaming="true"' : ''} title="${escapeHtml(tip)}"><div class="ag-recent-main">${mainInner}</div>${isRenaming ? '' : `<div class="ag-recent-side">${sideHtml}</div>${actionsHtml}`}</div>`;
+              const projAttr = it.project ? ` data-has-project="true" data-ag-recent-project="${escapeHtml(it.project)}"` : '';
+              return `<div class="ag-recent-row" role="button" tabindex="0"${isRenaming ? '' : ' draggable="true"'} data-ag-recent-id="${escapeHtml(it.id)}" data-ag-recent-title="${escapeHtml(it.title)}" data-active="${isAct ? 'true' : 'false'}"${projAttr}${isRenaming ? ' data-renaming="true"' : ''}><div class="ag-recent-main">${mainInner}</div>${isRenaming ? '' : `<div class="ag-recent-side">${sideHtml}</div>${actionsHtml}`}</div>`;
             })
             .join('')}</div>` + moreHtml
         : `<div class="ag-recent-empty">${escapeHtml(L('暂无最近对话', 'No recent conversations'))}</div>`;
@@ -6769,10 +6968,17 @@
     scheduleZhTitleAutoFix();
   }
 
-  const onWindowSidebarEvent = () => scheduleSidebarSync();
+  const onWindowSidebarEvent = () => {
+    hideRecentHoverCard();
+    scheduleSidebarSync();
+  };
   window.addEventListener('focus', onWindowSidebarEvent);
   window.addEventListener('blur', onWindowSidebarEvent);
   window.addEventListener('popstate', onWindowSidebarEvent);
+  window.addEventListener('resize', hideRecentHoverCard);
+  document.addEventListener('pointerover', onDocProjHoverPointerOver, true);
+  document.addEventListener('mouseover', onDocProjHoverPointerOver, true);
+  document.addEventListener('scroll', onDocScrollHideRecentHover, true);
 
   /* ==========================================================================
    * 8b. Live Zero-Reload UI Localization Engine (`i18n`, off / English by default)
@@ -6781,9 +6987,9 @@
    *       text nodes & title/placeholder/aria-label attributes with zero page reload.
    * ========================================================================== */
   const UX_I18N_BASE_EXCLUDE =
-    'code, pre, kbd, samp, textarea, input, style, script, noscript, [contenteditable="true"], [data-markdown-root], [data-testid="user-message-content"], .agy-user-bubble, [data-testid="skill-scope-item-pill"], bdi.context-scope-mention, .monaco-editor, .monaco-diff-editor, .xterm, [class*="onyx-key"], .prose, .markdown, [class*="chat-message"], [class*="group/file-title"], [data-testid="conversation-row-sidebar"] a[href^="/c/"], [data-testid="conversation-row-sidebar"] span.truncate, [data-testid="conversation-navigator-turn"], .msg-body, #raw, #swarm-title, #ag-live-metrics-pill, #ag-live-metrics-tooltip, [data-ag-i18n-ignore="1"], #ag-claude-model-popover, #ag-claude-model-subpop, #ag-claude-model-tripop, #ag-claude-quota-popover, #ag-claude-ux-settings-nav, #ag-claude-ux-settings-panel, #ag-claude-recent-section, #ag-recent-row-menu, #ag-recent-row-submenu, #ag-project-action-menu, [data-testid="model-selector-trigger"], [data-testid="permissions-selector-trigger"]';
+    'code, pre, kbd, samp, textarea, input, style, script, noscript, [contenteditable="true"], [data-markdown-root], [data-testid="user-message-content"], .agy-user-bubble, [data-testid="skill-scope-item-pill"], bdi.context-scope-mention, .monaco-editor, .monaco-diff-editor, .xterm, [class*="onyx-key"], .prose, .markdown, [class*="chat-message"], [class*="group/file-title"], [data-testid="conversation-row-sidebar"] a[href^="/c/"], [data-testid="conversation-row-sidebar"] span.truncate, [data-testid="conversation-navigator-turn"], .msg-body, #raw, #swarm-title, #ag-live-metrics-pill, #ag-live-metrics-tooltip, [data-ag-i18n-ignore="1"], #ag-claude-model-popover, #ag-claude-model-subpop, #ag-claude-model-tripop, #ag-claude-quota-popover, #ag-claude-ux-settings-nav, #ag-claude-ux-settings-panel, #ag-claude-recent-section, #ag-recent-hover-card, #ag-recent-row-menu, #ag-recent-row-submenu, #ag-project-action-menu, [data-testid="model-selector-trigger"], [data-testid="permissions-selector-trigger"]';
   const UX_I18N_ATTR_EXCLUDE =
-    'code, pre, kbd, samp, style, script, noscript, [data-markdown-root], [data-testid="user-message-content"], .agy-user-bubble, [data-testid="skill-scope-item-pill"], bdi.context-scope-mention, .monaco-editor, .monaco-diff-editor, .xterm, #ag-live-metrics-pill, #ag-live-metrics-tooltip, [data-ag-i18n-ignore="1"], #ag-claude-model-popover, #ag-claude-model-subpop, #ag-claude-model-tripop, #ag-claude-quota-popover, #ag-claude-ux-settings-nav, #ag-claude-ux-settings-panel, #ag-claude-recent-section, #ag-recent-row-menu, #ag-recent-row-submenu, #ag-project-action-menu, [data-testid="model-selector-trigger"], [data-testid="permissions-selector-trigger"]';
+    'code, pre, kbd, samp, style, script, noscript, [data-markdown-root], [data-testid="user-message-content"], .agy-user-bubble, [data-testid="skill-scope-item-pill"], bdi.context-scope-mention, .monaco-editor, .monaco-diff-editor, .xterm, #ag-live-metrics-pill, #ag-live-metrics-tooltip, [data-ag-i18n-ignore="1"], #ag-claude-model-popover, #ag-claude-model-subpop, #ag-claude-model-tripop, #ag-claude-quota-popover, #ag-claude-ux-settings-nav, #ag-claude-ux-settings-panel, #ag-claude-recent-section, #ag-recent-hover-card, #ag-recent-row-menu, #ag-recent-row-submenu, #ag-project-action-menu, [data-testid="model-selector-trigger"], [data-testid="permissions-selector-trigger"]';
   let uxI18nObserver = null;
   let uxI18nFlushTimer = 0;
   let uxI18nDirtyRoots = new Set();
@@ -14991,7 +15197,7 @@
   }
 
   const OWN_SEL =
-    '.ag-collapse-ghost, .ag-orbit-dots, .ag-elapsed-timer, #ag-claude-ctx-ring, #ag-claude-quota-popover, #ag-claude-model-popover, #ag-claude-model-subpop, #ag-claude-model-tripop, .ag-claude-inline-editor, .ag-claude-folder-badges, #ag-claude-recent-section, #ag-recent-row-menu, #ag-recent-row-submenu, #ag-project-action-menu, #ag-claude-ux-settings-nav, #ag-claude-ux-settings-panel, #ag-settings-stats-wrap, .ag-settings-subhdr-chev, #ag-claude-projects-nav-btn, #ag-claude-projects-view, #ag-claude-project-modal, .ag-code-fold-toggle, .ag-code-fold-bar, #ag-claude-ov-sections';
+    '.ag-collapse-ghost, .ag-orbit-dots, .ag-elapsed-timer, #ag-claude-ctx-ring, #ag-claude-quota-popover, #ag-claude-model-popover, #ag-claude-model-subpop, #ag-claude-model-tripop, .ag-claude-inline-editor, .ag-claude-folder-badges, #ag-claude-recent-section, #ag-recent-hover-card, #ag-recent-row-menu, #ag-recent-row-submenu, #ag-project-action-menu, #ag-claude-ux-settings-nav, #ag-claude-ux-settings-panel, #ag-settings-stats-wrap, .ag-settings-subhdr-chev, #ag-claude-projects-nav-btn, #ag-claude-projects-view, #ag-claude-project-modal, .ag-code-fold-toggle, .ag-code-fold-bar, #ag-claude-ov-sections';
   const CLASS_WATCH_SEL =
     '[id="antigravity.agentSidePanelInputBox"], [data-testid="tool-group-collapsible"], [data-testid="worked-for-collapsible"], [data-testid="progress-updates-collapsible"], [data-testid="ephemeral-tool-status"]';
 
@@ -15162,6 +15368,10 @@
     window.removeEventListener('focus', onWindowSidebarEvent);
     window.removeEventListener('blur', onWindowSidebarEvent);
     window.removeEventListener('popstate', onWindowSidebarEvent);
+    window.removeEventListener('resize', hideRecentHoverCard);
+    document.removeEventListener('pointerover', onDocProjHoverPointerOver, true);
+    document.removeEventListener('mouseover', onDocProjHoverPointerOver, true);
+    document.removeEventListener('scroll', onDocScrollHideRecentHover, true);
     window.removeEventListener('focus', onQuotaVisibilityOrFocus);
     document.removeEventListener('visibilitychange', onQuotaVisibilityOrFocus);
     if (autoQuotaRefreshTimer) {
@@ -15230,7 +15440,7 @@
     }
     document
       .querySelectorAll(
-        '.ag-collapse-ghost, .ag-orbit-dots, .ag-elapsed-timer, #ag-claude-ctx-ring, #ag-claude-quota-popover, #ag-claude-model-popover, #ag-claude-model-subpop, #ag-claude-model-tripop'
+        '.ag-collapse-ghost, .ag-orbit-dots, .ag-elapsed-timer, #ag-claude-ctx-ring, #ag-claude-quota-popover, #ag-claude-model-popover, #ag-claude-model-subpop, #ag-claude-model-tripop, #ag-recent-hover-card'
       )
       .forEach((el) => el.remove());
     document
@@ -15245,6 +15455,7 @@
     restoreLegacySidebarCjkNodes();
     clearSidebarHideNativeProjects();
     clearPinnedSidebarRowTooltips();
+    clearProjHoverCardSuppression(true);
     if (docRoot && docRoot.getAttribute('lang') === 'zh-CN') {
       if (hadDocLang && origDocLang !== null) docRoot.setAttribute('lang', origDocLang);
       else docRoot.removeAttribute('lang');

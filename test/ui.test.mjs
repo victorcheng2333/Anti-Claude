@@ -303,7 +303,10 @@ test('sidebar folder status badges & top Recents: aggregates collapsed folders, 
           <div>
             <div data-sidebar-section-drop-id="proj-a">
               <div class="group/header"><button type="button" data-testid="project-header" data-project-label="项目A" aria-expanded="false">项目A</button></div>
-              <div data-testid="conversation-row-sidebar" class="agy-sidebar-row"><span class="truncate">排查终端状态栏渲染异常</span></div>
+              <div data-testid="conversation-row-sidebar" data-pinned="false" class="agy-sidebar-row"><span class="truncate">排查终端状态栏渲染异常</span></div>
+            </div>
+            <div data-sidebar-section-drop-id="pinned-root">
+              <div data-testid="conversation-row-sidebar" data-pinned="true" class="agy-sidebar-row"><span class="truncate">已置顶高频会话</span></div>
             </div>
             <div data-sidebar-section-drop-id="proj-b">
               <div class="group/header"><button type="button" data-testid="project-header" data-project-label="项目B" aria-expanded="true">项目B</button></div>
@@ -403,11 +406,36 @@ test('sidebar folder status badges & top Recents: aggregates collapsed folders, 
   );
   assert.equal(h.doc.querySelector('[data-testid="conversation-row-sidebar"] span.truncate').textContent, '排查终端状态栏渲染异常');
   assert.equal(h.doc.querySelectorAll('#ag-claude-recent-section .ag-recent-proj').length, 0, 'Variant A uses pure single-line rows');
-  assert.match(recentRows[1].getAttribute('title') || '', /Project: 项目B/, 'hover title exposes project name in default English UI');
+  assert.equal(recentRows[1].hasAttribute('title'), false, 'omits plain browser title tooltip in favor of floating hover card');
+  assert.equal(recentRows[1].getAttribute('data-ag-recent-project'), '项目B', 'retains project metadata on row');
+
+  recentRows[1].dispatchEvent(new h.window.MouseEvent('mouseover', { bubbles: true }));
+  await new Promise((r) => setTimeout(r, 340));
+  const hoverCard = h.doc.getElementById('ag-recent-hover-card');
+  assert.ok(hoverCard, 'renders floating Recents hover card on row hover');
+  assert.equal(hoverCard.getAttribute('data-open'), 'true');
+  assert.match(hoverCard.textContent || '', /正在后台编译/);
+  assert.match(hoverCard.textContent || '', /项目B/);
+  assert.match(hoverCard.textContent || '', /Updated /);
+
+  const recentSec = h.doc.getElementById('ag-claude-recent-section');
+  recentSec.dispatchEvent(new h.window.MouseEvent('mouseleave', { bubbles: false }));
+  assert.equal(hoverCard.getAttribute('data-open'), 'false', 'hides hover card on mouseleave');
+
+  const projSidebarRow = h.doc.querySelector('[data-testid="conversation-row-sidebar"][data-pinned="false"]');
+  projSidebarRow.dispatchEvent(new h.window.MouseEvent('mouseover', { bubbles: true }));
+  assert.equal(h.doc.documentElement.getAttribute('data-ag-hide-proj-hovercard'), '1', 'suppresses native hover card on Projects rows');
+
+  const pinnedSidebarRow = h.doc.querySelector('[data-testid="conversation-row-sidebar"][data-pinned="true"]');
+  pinnedSidebarRow.dispatchEvent(new h.window.MouseEvent('mouseover', { bubbles: true }));
+  assert.equal(h.doc.documentElement.hasAttribute('data-ag-hide-proj-hovercard'), false, 'preserves native hover card on Pinned rows');
+
   recentRows[1].click();
   assert.deepEqual(JSON.parse(JSON.stringify(navigatedTo)), { to: '/c/$cascadeId', params: { cascadeId: 'conv-running' } });
   h.cleanups.forEach((fn) => fn());
   assert.equal(h.doc.documentElement.hasAttribute('lang'), false, 'dispose restores original html lang state');
+  assert.equal(h.doc.getElementById('ag-recent-hover-card'), null, 'dispose removes Recents hover card');
+  assert.equal(h.doc.documentElement.hasAttribute('data-ag-hide-proj-hovercard'), false, 'dispose clears Projects hover card suppression');
   h.close();
 });
 
@@ -1323,7 +1351,8 @@ test('projects workspace: 3-level Claude Projects flow (grid -> detail page with
     ['c-101', 'c-102'],
     'sorted newest-first across projects'
   );
-  assert.match(unifiedRows[0].getAttribute('title') || '', /Project: Quotation/, 'row tooltip exposes owning project name');
+  assert.equal(unifiedRows[0].hasAttribute('title'), false, 'omits plain browser title tooltip');
+  assert.equal(unifiedRows[0].getAttribute('data-ag-recent-project'), 'Quotation', 'row metadata exposes owning project name');
 
   /* 2. Level 1: Clicking opens Projects card grid (including CLI Project) */
   projBtn.click();
@@ -1528,7 +1557,8 @@ test('unified sidebar Recents: mixes project & standalone chats without 8-item c
   const rows = [...sec.querySelectorAll('.ag-recent-row')];
   assert.equal(rows.length, 10, 'renders all 10 mixed project + standalone chats without old 4/8 cap');
   assert.equal(rows[0].getAttribute('data-ag-recent-id'), 'c-1');
-  assert.match(rows[0].getAttribute('title') || '', /Project: 前端工程重构/, 'shows owning project name in tooltip');
+  assert.equal(rows[0].hasAttribute('title'), false, 'omits plain browser title tooltip');
+  assert.equal(rows[0].getAttribute('data-ag-recent-project'), '前端工程重构', 'shows owning project name in metadata');
 
   /* Inline hover Pin button */
   rows[0].querySelector('[data-ag-recent-pin="c-1"]').click();
