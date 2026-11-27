@@ -13,11 +13,11 @@
 需要 macOS 与 Node.js `>= 22`。
 
 ```bash
-git clone https://github.com/hongqi7/Anti-Claude.git ~/Developer/Anti-Claude
+git clone https://github.com/victorcheng2333/Anti-Claude.git ~/Developer/Anti-Claude
 node ~/Developer/Anti-Claude/install.mjs install
 ```
 
-也可以直接发给 Antigravity 或 Claude Code：`帮我安装 https://github.com/hongqi7/Anti-Claude`。装完当前窗口直接热生效，不用重启客户端。
+也可以直接发给 Antigravity 或 Claude Code：`帮我安装 https://github.com/victorcheng2333/Anti-Claude`。装完当前窗口直接热生效，不用重启客户端。
 
 常用命令：
 
@@ -40,11 +40,11 @@ node ~/Developer/Anti-Claude/install.mjs uninstall             # 卸载并还原
 ### 2. 客户端界面与高频交互
 
 - **配色与双栏统一排版**：浅色纯白、深色暖炭灰，去掉双层套娃输入框与多余角标；全局统一苹果原生系统字体（`SF Pro` + `PingFang SC` 14px，支持 `94.5% / 95% / 100%` 三档中文字高校准实时切换），正文与气泡防段尾单字孤行并开启连续全角标点挤压，左右双栏统一 `1/8` 字宽原生留白与 `zh-CN` 避头尾禁则。
-- **分层模型菜单与额度圆环**：把平铺的模型菜单收成 5 个常用主力模型（数字键 `1–5` 秒切），「思考强度」（`Low / Medium / High / Extra`）和「更多模型」拆入二级菜单；进入「更多模型 → 多智能体编排」后，全面适配 `v2.34+` 编排器规划列表（`Gemini 4 Neon/Carbon/Argon` 与 `Claude Opus 5.5`），支持右侧三级展开各主模型的思考强度，并在编排区底部提供独立「执行模型」副行（严格按官方 `orchestrator-model-roles` 白名单过滤并与原生设置双向同步）。菜单底部的「官方菜单」一行（或按住 `⌥ Option` 点模型按钮）随时打开 Antigravity 原生模型菜单，智能体（Agent）选择器、Best-of-N 以及官方新版本追加的选项都不会被遮住。模型旁增加上下文占用圆环，点开查看 5 小时 / 每周套餐额度、一键压缩当前上下文并实时同步压缩状态；底栏保留 `tok/s · TTFT`，悬停查看缓存命中率与分项耗时。
+- **分层模型菜单与额度圆环**：把平铺的模型菜单收成 5 个常用主力模型（数字键 `1–5` 秒切，默认展示 `Gemini 4 Neon`、`Gemini 4 Hydrogen`、`Orchestrator · Gemini 4 Neon`、`Claude Opus 5.5`、`Claude Sonnet 5.5`），「思考强度」（`Low / Medium / High / Extra`）和「更多模型」拆入二级菜单（其余模型归入「其他模型」，剩余编排器归入「多智能体编排」）；进入「更多模型 → 多智能体编排」后，全面适配 `v2.34+` 编排器规划列表（`Gemini 4 Carbon/Argon` 与 `Claude Opus 5.5`），支持右侧三级展开各主模型的思考强度，并在编排区底部提供独立「执行模型」副行（严格按官方 `orchestrator-model-roles` 白名单过滤并与原生设置双向同步）。菜单底部的「官方菜单」一行（或按住 `⌥ Option` 点模型按钮）随时打开 Antigravity 原生模型菜单，智能体（Agent）选择器、Best-of-N 以及官方新版本追加的选项都不会被遮住。模型旁增加上下文占用圆环，点开查看 5 小时 / 每周套餐额度、一键压缩当前上下文并实时同步压缩状态；底栏保留 `tok/s · TTFT`，悬停查看缓存命中率与分项耗时。
 - **右侧「概览」增强仪表盘**：将右侧面板升级为集紧凑四宫格快捷入口、原生产物卡片、本地工作环境与 Git 脏状态、上下文缓存拆解与命中率 + 一键 `Compact`、谷歌蓝 20 段双窗口已用额度条（带时间进度游标并随模型切换自动联动）、子智能体（Side chats）以及折叠式 MCP / 技能 / 规则清单于一体的实时仪表盘。
 - **长代码块折叠与顶栏吸顶**：超过 40 行的代码块默认收起为渐隐预览，底部一键「展开全部 · 共 N 行」（展开/收起选择跨虚拟滚动记忆），滚动时代码块顶栏的语言名与复制按钮始终吸顶。
 - **Claude 风格「项目」工作区与「技能与自定义」增强**：在侧栏「自动化任务」与「技能与自定义」之间新增独立「项目」入口，复刻 Claude Desktop 三级交互流（项目卡片墙 → 项目详情工作台：含支持完整 `@` 引用菜单、剪贴板粘贴/拖入图片与 `⌘+点击` 打开 URL 的项目专属开聊框、多文件夹关联切换、历史对话、所见即所得双向直通读写项目根目录 `AGENTS.md` 指令（支持预览与一键访达定位）、参考文件与项目定时任务 → 一键直达对话）；同时为「技能与自定义」页补齐分类标签切换、技能卡片化排版以及原生缺失的「`+ 添加技能`」「`+ 新建子 Agent`」向导与本地导入。
-- **侧栏统一全量「最近对话」、全场景拖拽引用与气泡内撤回重编**：默认隐藏原生「项目」树与仅含非项目会话的「对话」分组，保留顶部单行紧凑「置顶对话」并在下方同一滚动流中用全量混排的「最近对话」统一展示所有项目与普通对话（支持悬停查看所属项目、快捷置顶、右键/`⋯` 菜单直达所属项目、行内重命名、归档与二次确认删除，关闭即恢复原生分组）。**超越官方 `v2.34+` 原版（原版仅支持拖右侧辅助栏顶部的子代理标签页，拖左栏对话只会触发分屏而无法引用）：Anti-Claude 将左栏「最近对话」、「置顶对话」（拖出侧栏带跟随鼠标悬浮小卡片，覆盖整个对话区并同步触发原生淡入高亮动画，按住 `Option`/`Alt` 拖拽可保留分屏）及项目内对话/参考文件全部打通，直接拖进任意输入框即可插入 `@对话` / `@文件` 引用胶囊。** 点击消息「撤回」时直接在原气泡内展开编辑框修改重发，可选是否同步回滚代码改动。
+- **侧栏顶部「最近对话」+ 原生「项目」分项目共存、全场景拖拽引用与气泡内撤回重编**：默认保留原生「项目」分项目二级目录，并在上方同时展示可折叠的「最近对话」快捷列表实现双视图共存；你也可以随时在 **Settings → UI Enhancements** 里切换「侧栏顶部『最近对话』」或「侧栏统一『最近对话』」（开启统一模式后会隐藏原生分组，在顶部 `Pinned` 下方用全量混排的「最近对话」统一展示全部项目与普通对话，支持悬停查看所属项目、快捷置顶、右键/`⋯` 菜单直达所属项目、行内重命名、归档与二次确认删除）。**超越官方 `v2.34+` 原版（原版仅支持拖右侧辅助栏顶部的子代理标签页，拖左栏对话只会触发分屏而无法引用）：Anti-Claude 将左栏「最近对话」、「置顶对话」（拖出侧栏带跟随鼠标悬浮小卡片，覆盖整个对话区并同步触发原生淡入高亮动画，按住 `Option`/`Alt` 拖拽可保留分屏）及项目内对话/参考文件全部打通，直接拖进任意输入框即可插入 `@对话` / `@文件` 引用胶囊。** 点击消息「撤回」时直接在原气泡内展开编辑框修改重发，可选是否同步回滚代码改动。
 - **默认英文、实时汉化开关与设置侧栏收纳**：项目默认保持英文原版界面；在客户端「Settings → UI Enhancements（设置 → 界面增强）」内可单独免重启开关全部增强模块、切换「中文界面汉化」以及 `94.5% / 95% / 100%` 中文字高校准，并将设置侧栏冗长的「项目 / 未关联项目」用量范围收纳进三级折叠「统计」菜单。macOS 下后台自动跟随客户端升级重挂注入（兼容 `v2.33+` 移除默认调试端口的改动）。
 
 ### 3. Antigravity CLI（`agy`）支持
@@ -65,4 +65,4 @@ node ~/Developer/Anti-Claude/install.mjs uninstall             # 卸载并还原
 
 ## 致谢与许可
 
-自带零外部依赖的独立 CDP 注入与 SQLite 遥测内核，早期架构与部分配色思路曾参考 [@Anarcadia/chuanban-antigravity-theme-patch](https://github.com/Anarcadia/chuanban-antigravity-theme-patch) 与 [@AlexByoung/Claudized-Antigravity](https://github.com/AlexByoung/Claudized-Antigravity)。MIT License。
+基于 [@hongqi7/Anti-Claude](https://github.com/hongqi7/Anti-Claude) 定制。自带零外部依赖的独立 CDP 注入与 SQLite 遥测内核，早期架构与部分配色思路曾参考 [@Anarcadia/chuanban-antigravity-theme-patch](https://github.com/Anarcadia/chuanban-antigravity-theme-patch) 与 [@AlexByoung/Claudized-Antigravity](https://github.com/AlexByoung/Claudized-Antigravity)。MIT License。

@@ -84,7 +84,7 @@ const LEGACY_THEME_DAEMON_PLIST = path.join(HOME, 'Library', 'LaunchAgents', `${
 const LEGACY_DAEMON_WRAPPER_FILE = path.join(AGY_DIR, 'scripts', 'antigravity-font-daemon.mjs');
 const LEGACY_AG2_SYNC_SCRIPT = path.join(AGY_DIR, 'scripts', 'sync-antigravity-2.mjs');
 
-const SELF_REPO = 'https://github.com/hongqi7/Anti-Claude.git';
+const SELF_REPO = 'https://github.com/victorcheng2333/Anti-Claude.git';
 const RULE_BEGIN = '<!-- BEGIN anti-claude -->';
 const RULE_END = '<!-- END anti-claude -->';
 const LEGACY_RULE_BEGIN = '<!-- BEGIN antigravity-claude-ux -->';
