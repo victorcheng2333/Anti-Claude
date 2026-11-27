@@ -51,6 +51,7 @@ const STATE_FILE = path.join(STATE_DIR, 'install-state.json');
 const PID_FILE = path.join(STATE_DIR, 'daemon.pid');
 const PROJECTS_REGISTRY_FILE = path.join(STATE_DIR, 'projects-registry.json');
 const UI_PREFS_FILE = path.join(STATE_DIR, 'ui-prefs.json');
+const TITLE_FIX_STATE_FILE = path.join(STATE_DIR, 'title-fix-state.json');
 const BACKUP_DIR = path.join(STATE_DIR, 'backup');
 const BASE_DIR = path.join(STATE_DIR, 'base');
 const INCOMING_DIR = path.join(STATE_DIR, 'incoming');
@@ -2298,6 +2299,7 @@ async function cmdUninstall() {
     PID_FILE,
     PROJECTS_REGISTRY_FILE,
     UI_PREFS_FILE,
+    TITLE_FIX_STATE_FILE,
     BACKUP_DIR,
     BASE_DIR,
     INCOMING_DIR,

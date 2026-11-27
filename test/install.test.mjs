@@ -92,8 +92,10 @@ test('fresh install deploys standalone user layer and uninstall removes state cl
     assert.match(h.read('.gemini/AGENTS.md'), /update_steps/);
     assert.match(h.read('.gemini/AGENTS.md'), /ask_question/);
 
+    fs.writeFileSync(path.join(h.home, '.gemini', 'antigravity', 'anti-claude', 'title-fix-state.json'), '{"schema":1,"items":{}}');
     const un = run(h, ['uninstall']);
     assert.equal(un.status, 0, un.stderr);
+    assert.equal(h.exists('.gemini/antigravity/anti-claude/title-fix-state.json'), false, 'removes title-fix-state.json on uninstall');
     assert.equal(h.read('.gemini/antigravity/antigravity_state.pbtxt'), before.pbtxt);
     const cfg = JSON.parse(h.read('.gemini/config/config.json'));
     assert.equal(cfg.userSettings.verboseConversationSteps, false);

@@ -299,7 +299,7 @@ html[data-ag-pinned-chat-drop="true"] body > div.fixed.pointer-events-none.bg-pr
   -webkit-backdrop-filter: blur(8px) !important;
   color: #141413 !important;
   font-family: var(--font-sans) !important;
-  font-size: 13.5px !important;
+  font-size: var(--ag-ui-font-size, 13px) !important;
   font-weight: 400 !important;
   pointer-events: none !important;
   user-select: none !important;
@@ -1132,10 +1132,10 @@ div[data-ag-inline-stream="true"] > button[data-testid="worked-for-collapsible"]
   background-color: rgba(0, 0, 0, 0.03) !important;
 }
 
-/* 思考过程展开区：保持与正文一致的 14px 无衬线排版，但保留次级灰字层次 */
+/* 思考过程展开区：与正文联动无衬线排版，并保留次级灰字层次 */
 [data-testid="thinking-collapsible-trigger"] + div :is([data-markdown-root], p, li, blockquote) {
   font-family: var(--font-sans) !important;
-  font-size: 14px !important;
+  font-size: var(--ag-chat-font-size, 14px) !important;
   font-weight: 400 !important;
   letter-spacing: 0 !important;
 }
@@ -1271,7 +1271,7 @@ html:not([data-ag-theme-mode="dark"]) body:not(.dark) [data-testid="thinking-col
 .agy-card div.flex-1.flex-col > div.flex.items-center > span:first-child:not([data-testid="settings-row-badge"]):not(.text-muted-foreground),
 :is([role="dialog"]:has([data-testid="settings-sidebar"]), [data-split-root]:has([data-testid="settings-sidebar"])) button.rounded-xl :is(.font-semibold, .font-medium) {
   font-family: var(--font-sans) !important;
-  font-size: 14px !important;
+  font-size: var(--ag-ui-font-size, 13px) !important;
   font-weight: 500 !important;
   line-height: 1.4 !important;
   color: var(--foreground, #141413) !important;
@@ -1455,7 +1455,7 @@ html:not([data-ag-theme-mode="dark"]) body:not(.dark) [data-testid="settings-sid
 }
 
 [data-testid="settings-sidebar"] button[data-testid="settings-nav-item-Account"] div.flex-col > span:first-child {
-  font-size: 13.5px !important;
+  font-size: var(--ag-ui-font-size, 13px) !important;
   font-weight: 500 !important;
   color: var(--foreground, #141413) !important;
 }
@@ -1478,7 +1478,7 @@ html:not([data-ag-theme-mode="dark"]) body:not(.dark) [data-testid="settings-sid
   padding: 5px 10px !important;
   border-radius: 8px !important;
   font-family: var(--font-sans) !important;
-  font-size: 13.5px !important;
+  font-size: var(--ag-ui-font-size, 13px) !important;
   font-weight: 450 !important;
   line-height: 20px !important;
   letter-spacing: 0 !important;
@@ -1802,7 +1802,7 @@ html:not([data-ag-theme-mode="dark"]) body:not(.dark) .ag-cm-row:is(:hover, [dat
   display: inline-flex !important;
   align-items: center !important;
   gap: 5px !important;
-  font-size: 13.5px !important;
+  font-size: calc(var(--ag-ui-font-size, 13px) - 0.5px) !important;
   color: #676767 !important;
 }
 
@@ -1864,7 +1864,7 @@ html:not([data-ag-theme-mode="dark"]) body:not(.dark) .ag-cm-row:is(:hover, [dat
 
 .ag-cm-sub-exec-row {
   min-height: 34px !important;
-  font-size: 13.5px !important;
+  font-size: var(--ag-ui-font-size, 13px) !important;
 }
 
 .ag-cm-exec-label {
@@ -1908,7 +1908,7 @@ html:not([data-ag-theme-mode="dark"]) body:not(.dark) .ag-cm-row:is(:hover, [dat
 .ag-cm-exec-row {
   min-height: 32px !important;
   padding: 5px 12px 3px 12px !important;
-  font-size: 13.5px !important;
+  font-size: var(--ag-ui-font-size, 13px) !important;
 }
 
 .ag-cm-exec-name {
@@ -2516,7 +2516,7 @@ html:not([data-ag-theme-mode="dark"]) body:not(.dark) [data-testid="user-message
   resize: none !important;
   overflow-y: auto !important;
   font-family: var(--font-editor-sans) !important;
-  font-size: 14px !important;
+  font-size: var(--ag-chat-font-size, 14px) !important;
   font-weight: 400 !important;
   line-height: 1.6 !important;
   text-autospace: no-autospace !important;
@@ -2870,7 +2870,8 @@ html:not([data-ag-theme-mode="dark"]) body:not(.dark) .ag-claude-folder-badge[da
 .agy-row-actions > button[aria-label="Pin conversation" i],
 .agy-row-actions > button[aria-label="Unpin conversation" i],
 .agy-row-actions > button[data-ag-i18n-orig-aria-label="Pin conversation" i],
-.agy-row-actions > button[data-ag-i18n-orig-aria-label="Unpin conversation" i] {
+.agy-row-actions > button[data-ag-i18n-orig-aria-label="Unpin conversation" i],
+#ag-claude-recent-section .ag-recent-actions [data-ag-recent-pin] {
   display: none !important;
 }
 
@@ -2990,8 +2991,8 @@ html:not([data-ag-theme-mode="dark"]) body:not(.dark) #ag-claude-recent-section 
 #ag-claude-recent-section .ag-recent-hdr,
 #ag-claude-recent-section .ag-recent-hdr span {
   font-family: var(--font-sans) !important;
-  font-size: 12px !important;
-  line-height: 16px !important;
+  font-size: max(10.5px, calc(var(--ag-ui-font-size, 13px) - 1.5px)) !important;
+  line-height: calc(var(--ag-ui-font-size, 13px) + 2.5px) !important;
   font-weight: 400 !important;
   letter-spacing: 0 !important;
   text-shadow: none !important;
@@ -3211,8 +3212,8 @@ html:not([data-ag-theme-mode="dark"]) body:not(.dark) #ag-claude-recent-section 
   display: flex !important;
   align-items: center !important;
   font-family: var(--font-sans) !important;
-  font-size: 12px !important;
-  line-height: 16px !important;
+  font-size: max(10.5px, calc(var(--ag-ui-font-size, 13px) - 1.5px)) !important;
+  line-height: calc(var(--ag-ui-font-size, 13px) + 2.5px) !important;
   font-weight: 400 !important;
   letter-spacing: 0 !important;
   text-shadow: none !important;
@@ -3983,7 +3984,7 @@ html:not([data-ag-theme-mode="dark"]) body:not(.dark) .ag-cux-seg-btn[aria-check
 }
 
 #ag-claude-projects-view .ag-proj-card-title {
-  font-size: 14px !important;
+  font-size: var(--ag-ui-font-size, 13px) !important;
   font-weight: 400 !important;
   line-height: 1.4 !important;
   color: #262422 !important;
@@ -4725,7 +4726,7 @@ html:not([data-ag-theme-mode="dark"]) body:not(.dark) .ag-cux-seg-btn[aria-check
   resize: none !important;
   background: transparent !important;
   color: inherit !important;
-  font-size: 14.5px !important;
+  font-size: var(--ag-chat-font-size, 14px) !important;
   line-height: 1.55 !important;
   font-family: var(--font-editor-sans, var(--font-sans)) !important;
 }
@@ -4944,7 +4945,7 @@ html:not([data-ag-theme-mode="dark"]) body:not(.dark) .ag-cux-seg-btn[aria-check
   display: inline-flex !important;
   align-items: center !important;
   gap: 7px !important;
-  font-size: 14px !important;
+  font-size: var(--ag-ui-font-size, 13px) !important;
   font-weight: 400 !important;
   color: #262422 !important;
   max-width: 100% !important;
@@ -5040,7 +5041,7 @@ html:not([data-ag-theme-mode="dark"]) body:not(.dark) .ag-cux-seg-btn[aria-check
   display: inline-flex !important;
   align-items: center !important;
   gap: 6px !important;
-  font-size: 14px !important;
+  font-size: var(--ag-ui-font-size, 13px) !important;
   font-weight: 500 !important;
   color: #30302E !important;
 }
@@ -6552,9 +6553,9 @@ html:not([data-ag-theme-mode="dark"]) body:not(.dark) [data-testid="settings-sid
   text-overflow: ellipsis !important;
   white-space: nowrap !important;
   font-family: var(--font-sans) !important;
-  font-size: 14px !important;
+  font-size: var(--ag-ui-font-size, 13px) !important;
   font-weight: 400 !important;
-  line-height: 20px !important;
+  line-height: calc(var(--ag-ui-font-size, 13px) + 6px) !important;
   letter-spacing: 0 !important;
   color: var(--foreground, #141413) !important;
   -webkit-font-smoothing: antialiased !important;
@@ -6562,9 +6563,9 @@ html:not([data-ag-theme-mode="dark"]) body:not(.dark) [data-testid="settings-sid
 
 :is(html[data-ag-theme-mode="dark"] body, body.dark) [data-testid="settings-sidebar"] [data-ag-stats-subhdr="1"][data-ag-stats-open] h2 {
   font-family: var(--font-sans) !important;
-  font-size: 14px !important;
+  font-size: var(--ag-ui-font-size, 13px) !important;
   font-weight: 400 !important;
-  line-height: 20px !important;
+  line-height: calc(var(--ag-ui-font-size, 13px) + 6px) !important;
   color: #ECECEA !important;
   -webkit-font-smoothing: antialiased !important;
 }

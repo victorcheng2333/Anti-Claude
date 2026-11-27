@@ -47,7 +47,8 @@
 }
 
 :root {
-  --ag-chat-font-size: 16px;
+  --ag-ui-font-size: 13px;
+  --ag-chat-font-size: 14px;
 }
 
 /* Browser-hole-safe surface bindings (never paint opaque backgrounds when a native browser WebContentsView hole is open) */
