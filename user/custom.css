@@ -2855,11 +2855,17 @@ html:not([data-ag-theme-mode="dark"]) body:not(.dark) .ag-claude-folder-badge[da
   }
 }
 
-/* 隐藏侧栏对话行悬停操作区中的「Stop execution」按钮，防止切换对话或点置顶/更多时误点中止正在运行的任务 */
+/* 隐藏侧栏对话行悬停操作区中易误点的「Stop execution」与「Archive conversation」按钮（保留置顶与「⋮」更多菜单，归档可从菜单操作） */
 .agy-row-actions > button[aria-label="Stop execution" i],
 .agy-row-actions > button[data-ag-i18n-orig-aria-label="Stop execution" i],
 .agy-row-actions > button[aria-label="停止执行"],
-.agy-row-actions > button:has(> svg > path[d^="M330-330H630V-630H330v300Z"]) {
+.agy-row-actions > button:has(> svg > path[d^="M330-330H630V-630H330v300Z"]),
+.agy-row-actions > button[data-testid="conversation-archive-button"],
+.agy-row-actions > button[aria-label="Archive conversation" i],
+.agy-row-actions > button[data-ag-i18n-orig-aria-label="Archive conversation" i],
+.agy-row-actions > button[aria-label="归档对话"],
+.agy-row-actions > button[aria-label="归档"],
+.agy-row-actions > button:has(> svg > path[d^="M480-256.16L626.15-402.31"]) {
   display: none !important;
 }
 
