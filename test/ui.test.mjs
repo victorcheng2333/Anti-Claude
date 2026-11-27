@@ -959,10 +959,11 @@ test('dictation editor isolation, ask-question icon removal & Orchestrator model
   h.window.__t.syncStepStream();
   assert.equal(btn.textContent.trim(), 'Gemini 4 Carbon Extra');
 
-  /* 4. Primary list places Gemini 4 Neon above Argon (5 items) and omits Orch abbreviation on 更多模型 */
+  /* 4. Primary list follows the curated order (bc105d1): Gemini 4 Neon, Gemini 4 Hydrogen, Orchestrator Neon, Claude
+        Opus 5.5 (Sonnet 5.5 is absent from this account); the active non-primary model marks 更多模型 without an Orch label */
   btn.__reactFiber$m = {
     memoizedProps: {
-      selectedModel: { label: 'Orchestrator (Neon)', value: 'orch-neon' },
+      selectedModel: { label: 'Gemini 4 Carbon (High)', value: 'c-h' },
       setSelectedModel: () => {},
       modelOptions: [
         { label: 'Gemini 4 Carbon (High)', value: 'c-h' },
@@ -980,13 +981,7 @@ test('dictation editor isolation, ask-question icon removal & Orchestrator model
   const primaryNames = [...mainPop.querySelectorAll('[data-ag-cm-family]')].map((el) =>
     el.getAttribute('data-ag-cm-family')
   );
-  assert.deepEqual(primaryNames, [
-    'Gemini 4 Carbon',
-    'Gemini 4 Neon',
-    'Gemini 4 Argon',
-    'Gemini 4 Hydrogen',
-    'Gemini 3.8 Flash'
-  ]);
+  assert.deepEqual(primaryNames, ['Gemini 4 Neon', 'Gemini 4 Hydrogen', 'Orchestrator (Neon)', 'Claude Opus 5.5']);
   const moreRow = mainPop.querySelector('[data-ag-cm-subtrigger="more"]');
   assert.ok(moreRow && moreRow.querySelector('.ag-cm-dot'), 'blue dot marks active model inside 更多模型');
   assert.equal(moreRow.textContent.includes('Orch'), false, 'no abbreviated label shown on 更多模型 row');

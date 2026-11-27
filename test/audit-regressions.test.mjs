@@ -2287,17 +2287,22 @@ test('[v2.34.0 Orchestrator Planners & Thinking Effort] unlocks thinking effort 
       ['setSelected', 1537]
     ]);
 
-    /* 3. More models lists all 4 dynamic Orchestrator planners including Claude Opus 5.5 without legacy duplicates */
+    /* 3. Orchestrator · Gemini 4 Neon is promoted to the primary list (bc105d1); More models keeps the remaining
+          dynamic Orchestrator planners incl. Claude Opus 5.5 without legacy duplicates, then non-primary models */
     openMenu();
+    assert.ok(
+      mainPop.querySelector('[data-ag-cm-family="Orchestrator · Gemini 4 Neon"]'),
+      'Orchestrator · Gemini 4 Neon sits in the primary list'
+    );
     mainPop.querySelector('[data-ag-cm-subtrigger="more"]').click();
     const moreLabels = Array.from(subPop.querySelectorAll('[data-ag-cm-more-family]')).map((el) =>
       el.getAttribute('data-ag-cm-more-family')
     );
     assert.deepEqual(moreLabels, [
-      'Orchestrator · Gemini 4 Neon',
       'Orchestrator · Gemini 4 Carbon',
       'Orchestrator · Gemini 4 Argon',
-      'Orchestrator · Claude Opus 5.5'
+      'Orchestrator · Claude Opus 5.5',
+      'Gemini 4 Carbon'
     ]);
 
     /* 4. Selecting Claude Opus 5.5 inherits High effort, calls select(1402), and exposes Low/Medium/High only */
@@ -2324,10 +2329,11 @@ test('[v2.34.0 Orchestrator Planners & Thinking Effort] unlocks thinking effort 
       ['setSelected', 1537]
     ]);
 
-    /* 5. Switching back to a standard primary model invokes setSelectedModel only */
+    /* 5. Switching back to a standard (non-Orchestrator) model invokes setSelectedModel only */
     calls.length = 0;
     openMenu();
-    mainPop.querySelector('[data-ag-cm-family="Gemini 4 Carbon"]').click();
+    mainPop.querySelector('[data-ag-cm-subtrigger="more"]').click();
+    subPop.querySelector('[data-ag-cm-more-family="Gemini 4 Carbon"]').click();
     assert.deepEqual(calls, [['setSelected', 1438]]);
   } finally {
     window.close();
@@ -4188,9 +4194,12 @@ test('[Scheme C · Orchestrator Level-3 Planner Effort & Official Whitelisted Ex
     assert.equal(subPop.getAttribute('data-open'), 'true');
     assert.equal(triPop.getAttribute('data-open'), 'false');
 
-    const orchNeonRow = subPop.querySelector('[data-ag-cm-more-family="Orchestrator · Gemini 4 Neon"]');
+    /* Orchestrator · Gemini 4 Neon is promoted to Level 1 (bc105d1); the remaining planner stays under Orchestrators */
+    assert.ok(mainPop.querySelector('[data-ag-cm-family="Orchestrator · Gemini 4 Neon"]'), 'Orchestrator · Gemini 4 Neon in Level 1');
+    assert.equal(subPop.querySelector('[data-ag-cm-more-family="Orchestrator · Gemini 4 Neon"]'), null, 'not duplicated in Level 2');
+    const orchCarbonRow = subPop.querySelector('[data-ag-cm-more-family="Orchestrator · Gemini 4 Carbon"]');
     const execRow = subPop.querySelector('[data-ag-cm-tritrigger="executor"]');
-    assert.ok(orchNeonRow, 'Orchestrator · Gemini 4 Neon row present in Level 2');
+    assert.ok(orchCarbonRow, 'Orchestrator · Gemini 4 Carbon row present in Level 2');
     assert.ok(execRow, 'Dedicated Executor model row rendered under Orchestrators in Level 2');
     assert.match(execRow.textContent, /执行模型/);
     assert.match(execRow.textContent, /Hydrogen · Extra/, 'defaults to highest-effort first whitelisted executor');
@@ -4228,24 +4237,24 @@ test('[Scheme C · Orchestrator Level-3 Planner Effort & Official Whitelisted Ex
     triPop.querySelector('[data-ag-cm-exec-val="0"]').click();
     assert.equal(prefs.orchestratorExecutorModel, 0, 'Reset button restores default executor (0)');
 
-    /* Hovering an "Other models" row closes Level 3 cleanly */
-    const otherRow = subPop.querySelector('[data-ag-cm-more-family="Claude Opus 5.5"]');
+    /* Hovering an "Other models" row closes Level 3 cleanly (Claude Opus 5.5 is a primary model since bc105d1) */
+    const otherRow = subPop.querySelector('[data-ag-cm-more-family="Gemini 3.8 Flash"]');
     assert.ok(otherRow);
     otherRow.dispatchEvent(new window.MouseEvent('mouseover', { bubbles: true }));
     assert.equal(triPop.getAttribute('data-open'), 'false', 'hovering Other models closes Level 3');
 
-    /* Hovering Orchestrator · Gemini 4 Neon opens Level 3 planner effort submenu; picking High applies Orchestrator + planner */
-    subPop.querySelector('[data-ag-cm-more-family="Orchestrator · Gemini 4 Neon"]').dispatchEvent(
+    /* Hovering Orchestrator · Gemini 4 Carbon opens Level 3 planner effort submenu; picking High applies Orchestrator + planner */
+    subPop.querySelector('[data-ag-cm-more-family="Orchestrator · Gemini 4 Carbon"]').dispatchEvent(
       new window.MouseEvent('mouseover', { bubbles: true })
     );
     assert.equal(triPop.getAttribute('data-open'), 'true');
     assert.equal(triPop.getAttribute('data-tri-kind'), 'planner');
-    assert.match(triPop.textContent, /主模型强度 · Gemini 4 Neon/);
+    assert.match(triPop.textContent, /主模型强度 · Gemini 4 Carbon/);
     const highPlannerRow = triPop.querySelector('[data-ag-cm-orch-effort="High"]');
     assert.ok(highPlannerRow, 'planner High effort row exists');
     highPlannerRow.click();
     assert.equal(selectedOpt.value, 1537, 'switches active model to Orchestrator');
-    assert.equal(pickedPlannerVal, 1532, 'sets orchestrator planner to Gemini 4 Neon (High)');
+    assert.equal(pickedPlannerVal, 1427, 'sets orchestrator planner to Gemini 4 Carbon (High)');
     assert.equal(mainPop.getAttribute('data-open'), 'false', 'closes popover after choosing planner effort');
     assert.equal(triPop.getAttribute('data-open'), 'false');
 
