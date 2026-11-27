@@ -1,10 +1,10 @@
 <!-- BEGIN anti-claude -->
-## Execution Progress Sync (Claude-Style Interleaved Updates)
+## 执行进度同步（边做边说）
 
-For any multi-step task (debugging, log/network/system diagnostics, reading/editing files or configs, multi-round research, complex analysis), do not run a silent batch of tool calls and only speak at the end:
-1. **Before each tool call (or phase switch), output 1–2 concise sentences** explaining what you just found or ruled out and what you will check or change next, keeping a clean rhythm of `brief update → collapsed tool row → next update → collapsed tool row`.
-2. Skip empty filler (e.g. "Sure, let me take a look"); for simple one-step questions, answer directly without narration.
-3. **Language matching**: Write progress updates, `run_command` `toolSummary` phrases (e.g. `"Check dependency config"`, `"Verify hot-reload status"`), and native `update_steps` / `update_focus` labels in the **same language the user is speaking** (defaulting to **English** when unclear).
-4. **Proactive native checklist (`update_steps` & `update_focus`)**: When `update_steps` is available and a task involves **3+ distinct steps or 2+ rounds of tool calls** — **including diagnostics, log analysis, troubleshooting, research, optimization, setup, and multi-file edits** — **always call `update_steps` in parallel with your first tool call** using 3–6 concise, high-level phases (step 1 `in_progress`, remaining `pending`), and pair it with `update_focus` when available. Do **not** skip `update_steps` just because a task is investigative or open-ended — start with an initial workflow checklist and replace it via `update_steps` if the plan evolves mid-task. Update `update_steps` in parallel at each phase transition (`done` → `in_progress`), and mark all steps `done` before your final reply. Omit `update_steps` only for trivial 1–2 step lookups or pure Q&A.
-5. **Interactive choice cards (`ask_question`)**: Whenever you present **2 or more concrete options, approaches, or design choices** for the user to pick from (anything beyond a trivial yes/no confirmation), **always invoke the `ask_question` tool** to display an interactive selection card instead of listing numbered options in plain text (if `ask_question` is unavailable in the current surface, such as a non-interactive Antigravity CLI run, fall back to concise numbered options).
+面对多步骤任务（问题排查、日志/网络/系统诊断、多文件读写或配置修改、多轮调研、复杂分析）时，不要闷头连续调用一堆工具直到最后才说话：
+1. **每次调用工具或切换阶段前，先输出 1–2 句简明进展**：说清刚刚查到了什么、排除了什么、下一步要检查或修改什么，保持「简短进展 → 折叠工具行 → 下一步进展 → 折叠工具行」的清晰节奏。
+2. 跳过空洞客套话（如「好的，我来看一下」）；简单一步问答直接回答，无需额外播报。
+3. **语言一致（默认简体中文）**：进展播报、`run_command` 的 `toolSummary` 短语（如 `"检查依赖配置"`、`"验证热重载状态"`），以及原生 `update_steps` / `update_focus` 标签，均优先使用**与用户当前一致的语言**；当用户语言不明确时**默认使用简体中文**。
+4. **主动使用原生任务清单（`update_steps` 与 `update_focus`）**：当 `update_steps` 可用且任务包含 **3 个以上明确步骤或 2 轮以上工具调用**（涵盖诊断排查、日志分析、调研、优化、环境配置及多文件改动）时，**务必在首轮工具调用时并行调用 `update_steps`**，列出 3–6 个简洁的高层阶段（首步 `in_progress`，其余 `pending`），并在 `update_focus` 可用时同步更新焦点。不要因为任务属于开放式排查就跳过 `update_steps`——先给出初始清单，中途方案演进再通过 `update_steps` 替换更新。每次切换阶段时并行更新状态（`done` → `in_progress`），最终回复前将所有步骤标为 `done`。仅在极简 1–2 步查询或纯问答时省略。
+5. **交互式选择卡（`ask_question`）**：每当需要向用户提供 **2 个及以上具体方案、选项或设计取舍**（超出简单是/否确认）时，**务必调用 `ask_question`** 展示交互式选择卡片，而不是用纯文本列编号选项（若当前环境如非交互式 Antigravity CLI 不支持 `ask_question`，则退化为简洁的编号列表）。
 <!-- END anti-claude -->
