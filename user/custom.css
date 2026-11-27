@@ -2824,6 +2824,37 @@ html:not([data-ag-theme-mode="dark"]) body:not(.dark) .ag-claude-folder-badge[da
   background-color: #78A9FF !important;
 }
 
+/* 原生侧栏「后台任务运行中」(`status-task-running` 的 `>_` 图标) 统一为谷歌蓝双点轨道旋转动画，
+   与自定义「最近对话」及目录折叠态 `.ag-folder-orbit` 视觉一致，避免误判为静止或卡死 */
+.agy-row-status [data-testid="status-task-running"] {
+  display: none !important;
+}
+
+.agy-row-status:has([data-testid="status-task-running"])::before {
+  content: "" !important;
+  display: inline-block !important;
+  width: 12px !important;
+  height: 12px !important;
+  flex-shrink: 0 !important;
+  background-repeat: no-repeat !important;
+  background-image:
+    radial-gradient(circle at 50% 2.2px, #2F75C3 1.9px, transparent 2.2px),
+    radial-gradient(circle at 50% 9.8px, #7BAEE6 1.5px, transparent 1.8px) !important;
+  animation: agOrbitSpin 1.05s linear infinite !important;
+}
+
+:is(html[data-ag-theme-mode="dark"] body, body.dark) .agy-row-status:has([data-testid="status-task-running"])::before {
+  background-image:
+    radial-gradient(circle at 50% 2.2px, #2F71E3 1.9px, transparent 2.2px),
+    radial-gradient(circle at 50% 9.8px, #78A9FF 1.5px, transparent 1.8px) !important;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .agy-row-status:has([data-testid="status-task-running"])::before {
+    animation: none !important;
+  }
+}
+
 /* 顶部最近对话区块：使下方虚拟列表自适应高度（compact 模式） */
 #ag-claude-recent-section[data-mode="compact"] + div {
   height: auto !important;
