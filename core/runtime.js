@@ -364,11 +364,16 @@
       if (el) el.remove();
     }
     applyThemeVars({}, {});
-    for (const attr of ['data-ag-theme-mode', 'data-ag-page-type', 'data-ag-os', 'data-ag-ux-lang', 'data-ag-custom-font-size', 'data-ag-cjk-scale', 'data-ag-ui-font-size', 'data-ag-chat-font-size']) {
+    for (const attr of ['data-ag-theme-mode', 'data-ag-page-type', 'data-ag-os', 'data-ag-ux-lang', 'data-ag-custom-font-size', 'data-ag-cjk-scale', 'data-ag-ui-font-size', 'data-ag-chat-font-size', 'data-ag-user-bubble-custom']) {
       document.documentElement.removeAttribute(attr);
     }
     document.documentElement.style.removeProperty('--ag-ui-font-size');
     document.documentElement.style.removeProperty('--ag-chat-font-size');
+    for (const mode of ['light', 'dark']) {
+      for (const prop of ['bg', 'fg', 'border', 'chip-bg', 'chip-hover']) {
+        document.documentElement.style.removeProperty(`--ag-user-bubble-${mode}-${prop}`);
+      }
+    }
     if (document.body) restoreAllTranslations(document.body);
     window.__ag_resolved_theme_mode = null;
     return null;

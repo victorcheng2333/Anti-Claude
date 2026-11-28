@@ -103,6 +103,13 @@ const ALLOWED_UI_MODULE_KEYS = new Set([
 const VALID_CJK_SCALES = new Set(['94.5', '95', '100']);
 const VALID_UI_FONT_SIZES = new Set(['12', '13', '14', '15', '16']);
 const VALID_CHAT_FONT_SIZES = new Set(['13', '14', '15', '16', '18']);
+const VALID_USER_BUBBLE_PRESETS = new Set(['default', 'peach', 'yellow', 'sage', 'blue', 'lavender', 'red']);
+function normalizeUserBubbleColor(raw) {
+  if (typeof raw !== 'string') return null;
+  const s = raw.trim().toLowerCase();
+  if (VALID_USER_BUBBLE_PRESETS.has(s)) return s;
+  return /^#[0-9a-f]{6}$/.test(s) ? s : null;
+}
 const INLINE_TEXT_EXTS = new Set([
   '.md', '.markdown', '.txt', '.json', '.yaml', '.yml', '.toml', '.csv', '.tsv', '.xml',
   '.html', '.htm', '.css', '.js', '.mjs', '.cjs', '.ts', '.tsx', '.jsx', '.py', '.go',
@@ -849,6 +856,7 @@ function sanitizeUiPrefs(raw) {
   const uiFontSize = VALID_UI_FONT_SIZES.has(rawUiSize) ? rawUiSize : null;
   const rawChatSize = String(raw.chatFontSize ?? '').trim().replace(/px$/i, '');
   const chatFontSize = VALID_CHAT_FONT_SIZES.has(rawChatSize) ? rawChatSize : null;
+  const userBubbleColor = normalizeUserBubbleColor(raw.userBubbleColor);
   const uiState = {};
   if (raw.uiState && typeof raw.uiState === 'object' && !Array.isArray(raw.uiState)) {
     if (typeof raw.uiState.recentCollapsed === 'boolean') {
@@ -859,7 +867,7 @@ function sanitizeUiPrefs(raw) {
     }
   }
   const updatedAt = Number(raw.updatedAt) > 0 ? Math.floor(Number(raw.updatedAt)) : 0;
-  return { modules, cjkFontScale, uiFontSize, chatFontSize, uiState, updatedAt };
+  return { modules, cjkFontScale, uiFontSize, chatFontSize, userBubbleColor, uiState, updatedAt };
 }
 
 function resolveEffectiveUserConfig(userConfigFile, rawCfg) {
@@ -904,6 +912,9 @@ function resolveEffectiveUserConfig(userConfigFile, rawCfg) {
   if (prefs.chatFontSize && (!manualConfigNewer || !baseObj.chatFontSize)) {
     out.chatFontSize = prefs.chatFontSize;
   }
+  if (prefs.userBubbleColor && (!manualConfigNewer || !baseObj.userBubbleColor)) {
+    out.userBubbleColor = prefs.userBubbleColor;
+  }
   return out;
 }
 
@@ -913,6 +924,7 @@ export function saveUiPrefs(payload) {
     cjkFontScale: null,
     uiFontSize: null,
     chatFontSize: null,
+    userBubbleColor: null,
     uiState: {},
     updatedAt: 0
   };
@@ -921,6 +933,7 @@ export function saveUiPrefs(payload) {
     cjkFontScale: null,
     uiFontSize: null,
     chatFontSize: null,
+    userBubbleColor: null,
     uiState: {},
     updatedAt: 0
   };
@@ -938,6 +951,9 @@ export function saveUiPrefs(payload) {
     ...(incoming.chatFontSize || cur.chatFontSize
       ? { chatFontSize: incoming.chatFontSize || cur.chatFontSize }
       : {}),
+    ...(incoming.userBubbleColor || cur.userBubbleColor
+      ? { userBubbleColor: incoming.userBubbleColor || cur.userBubbleColor }
+      : {}),
     uiState: Object.assign({}, cur.uiState, incoming.uiState)
   };
   fs.mkdirSync(STATE_DIR, { recursive: true });
@@ -949,6 +965,7 @@ export function saveUiPrefs(payload) {
     cjkFontScale: next.cjkFontScale || null,
     uiFontSize: next.uiFontSize || null,
     chatFontSize: next.chatFontSize || null,
+    userBubbleColor: next.userBubbleColor || null,
     uiState: next.uiState
   };
 }

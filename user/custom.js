@@ -52,6 +52,121 @@
   const VALID_CJK_SCALES = ['94.5', '95', '100'];
   const VALID_UI_FONT_SIZES = ['12', '13', '14', '15', '16'];
   const VALID_CHAT_FONT_SIZES = ['13', '14', '15', '16', '18'];
+  const USER_BUBBLE_PRESET_META = [
+    { id: 'default', hue: null, zh: '默认', en: 'Default' },
+    { id: 'peach', hue: 28, zh: '初稿', en: 'First Draft' },
+    { id: 'yellow', hue: 58, zh: '晨光', en: 'Daybreak' },
+    { id: 'sage', hue: 135, zh: '灵感', en: 'Spark' },
+    { id: 'blue', hue: 210, zh: '梦境', en: 'Dreamscape' },
+    { id: 'lavender', hue: 275, zh: '夜猫', en: 'Night Cat' },
+    { id: 'red', hue: 352, zh: '项圈', en: 'Red Collar' }
+  ];
+  const VALID_USER_BUBBLE_PRESETS = new Set(USER_BUBBLE_PRESET_META.map((p) => p.id));
+  function normalizeUserBubbleColor(v) {
+    if (typeof v !== 'string') return null;
+    const s = v.trim().toLowerCase();
+    if (VALID_USER_BUBBLE_PRESETS.has(s)) return s;
+    return /^#[0-9a-f]{6}$/.test(s) ? s : null;
+  }
+  function bubbleToHex(channels) {
+    return (
+      '#' +
+      channels
+        .map((v) => Math.max(0, Math.min(255, Math.round(v))).toString(16).padStart(2, '0'))
+        .join('')
+    );
+  }
+  function bubbleHexToRgb(hex) {
+    return [1, 3, 5].map((i) => parseInt(hex.slice(i, i + 2), 16));
+  }
+  function bubbleHueColor(hue) {
+    const h = (((hue % 360) + 360) % 360) / 60;
+    const x = 1 - Math.abs((h % 2) - 1);
+    const channels =
+      h < 1
+        ? [1, x, 0]
+        : h < 2
+          ? [x, 1, 0]
+          : h < 3
+            ? [0, 1, x]
+            : h < 4
+              ? [0, x, 1]
+              : h < 5
+                ? [x, 0, 1]
+                : [1, 0, x];
+    return bubbleToHex(channels.map((v) => (0.35 + v * 0.45) * 255));
+  }
+  function userBubbleSeed(pref) {
+    if (!pref || pref === 'default') return null;
+    if (pref.startsWith('#')) return pref;
+    const hit = USER_BUBBLE_PRESET_META.find((p) => p.id === pref);
+    return hit && typeof hit.hue === 'number' ? bubbleHueColor(hit.hue) : null;
+  }
+  function bubbleLuminance(hex) {
+    const [r, g, b] = bubbleHexToRgb(hex)
+      .map((v) => v / 255)
+      .map((v) => (v <= 0.04045 ? v / 12.92 : ((v + 0.055) / 1.055) ** 2.4));
+    return r * 0.2126 + g * 0.7152 + b * 0.0722;
+  }
+  function bubbleContrastRatio(a, b) {
+    const la = bubbleLuminance(a);
+    const lb = bubbleLuminance(b);
+    return (Math.max(la, lb) + 0.05) / (Math.min(la, lb) + 0.05);
+  }
+  function resolveUserBubbleColors(pref, mode) {
+    const seed = userBubbleSeed(pref);
+    if (!seed) return null;
+    const channels = bubbleHexToRgb(seed);
+    const dark = mode === 'dark';
+    const foreground = bubbleToHex([dark ? 232 : 38, dark ? 232 : 38, dark ? 232 : 38]);
+    const textRoles = dark ? ['#ECECEA', '#B8B7B2'] : ['#141413', '#52524E'];
+    const mix = (strength) =>
+      bubbleToHex(channels.map((v) => (dark ? 27 + v * strength : 255 - (255 - v) * strength)));
+    const constraining = textRoles.filter((role) => bubbleContrastRatio(mix(0), role) >= 4.5);
+    const readable = (bg) =>
+      bubbleContrastRatio(bg, foreground) >= 7 &&
+      constraining.every((role) => bubbleContrastRatio(bg, role) >= 4.5);
+    let strength = pref.startsWith('#') ? (dark ? 0.18 : 0.3) : dark ? 0.13 : 0.17;
+    if (!readable(mix(strength))) {
+      let low = 0;
+      let high = strength;
+      for (let i = 0; i < 16; i += 1) {
+        const mid = (low + high) / 2;
+        if (readable(mix(mid))) low = mid;
+        else high = mid;
+      }
+      strength = low;
+    }
+    const background = mix(strength);
+    const border = bubbleToHex(bubbleHexToRgb(background).map((v) => (dark ? v + 22 : v - 24)));
+    return { background, foreground, border };
+  }
+  function userBubbleChipColors(colors) {
+    const from = bubbleHexToRgb(colors.background);
+    const to = bubbleHexToRgb(colors.border);
+    const at = (amount) => bubbleToHex(from.map((v, i) => v + (to[i] - v) * amount));
+    return { background: at(0.4), pressed: at(0.7), border: colors.border };
+  }
+  function bubblePickerHueToHex(hue) {
+    const sat = 0.75;
+    const val = 0.9;
+    const f = (n) => {
+      const k = (n + hue / 60) % 6;
+      return val - val * sat * Math.max(0, Math.min(k, 4 - k, 1));
+    };
+    return bubbleToHex([f(5) * 255, f(3) * 255, f(1) * 255]);
+  }
+  function bubbleHexToHue(hex) {
+    const [r, g, b] = bubbleHexToRgb(hex);
+    const max = Math.max(r, g, b);
+    const d = max - Math.min(r, g, b);
+    if (d === 0) return 0;
+    const h = max === r ? ((g - b) / d) % 6 : max === g ? (b - r) / d + 2 : (r - g) / d + 4;
+    return Math.round((h * 60 + 360) % 360);
+  }
+  function bubblePickerSeed(pref) {
+    return userBubbleSeed(!pref || pref === 'default' ? 'sage' : pref) || '#39e663';
+  }
   function normalizeCjkScale(v) {
     const s = String(v == null ? '' : v).trim().replace(/%$/, '');
     return VALID_CJK_SCALES.includes(s) ? s : null;
@@ -104,6 +219,13 @@
     normalizeChatFontSize(localModOverrides.chatFontSize) ||
     normalizeChatFontSize(CFG_ROOT.chatFontSize) ||
     '14';
+  let currentUserBubbleColor =
+    normalizeUserBubbleColor(localModOverrides.userBubbleColor) ||
+    normalizeUserBubbleColor(CFG_ROOT.userBubbleColor) ||
+    'default';
+  let userBubbleCustomOpen = currentUserBubbleColor.startsWith('#');
+  let userBubbleDraftHex = bubblePickerSeed(currentUserBubbleColor);
+  let userBubbleLiveHex = null;
   function effectiveModBool(key, defaultVal = true) {
     if (Object.prototype.hasOwnProperty.call(localModOverrides, key)) {
       return Boolean(localModOverrides[key]);
@@ -153,10 +275,43 @@
     docRoot.style.setProperty('--ag-ui-font-size', `${currentUiFontSize}px`);
     docRoot.style.setProperty('--ag-chat-font-size', `${currentChatFontSize}px`);
   }
+  function isHostDarkTheme() {
+    if (docRoot && docRoot.getAttribute('data-ag-theme-mode') === 'dark') return true;
+    return Boolean(document.body && document.body.classList.contains('dark'));
+  }
+  function clearUserBubbleColorVars() {
+    if (!docRoot) return;
+    docRoot.removeAttribute('data-ag-user-bubble-custom');
+    for (const mode of ['light', 'dark']) {
+      for (const prop of ['bg', 'fg', 'border', 'chip-bg', 'chip-hover']) {
+        docRoot.style.removeProperty(`--ag-user-bubble-${mode}-${prop}`);
+      }
+    }
+  }
+  function applyUserBubbleColorVars(previewPref = null) {
+    if (!docRoot) return;
+    const pref = normalizeUserBubbleColor(previewPref) || currentUserBubbleColor;
+    if (!pref || pref === 'default') {
+      clearUserBubbleColorVars();
+      return;
+    }
+    for (const mode of ['light', 'dark']) {
+      const colors = resolveUserBubbleColors(pref, mode);
+      if (!colors) continue;
+      const chip = userBubbleChipColors(colors);
+      docRoot.style.setProperty(`--ag-user-bubble-${mode}-bg`, colors.background);
+      docRoot.style.setProperty(`--ag-user-bubble-${mode}-fg`, colors.foreground);
+      docRoot.style.setProperty(`--ag-user-bubble-${mode}-border`, colors.border);
+      docRoot.style.setProperty(`--ag-user-bubble-${mode}-chip-bg`, chip.background);
+      docRoot.style.setProperty(`--ag-user-bubble-${mode}-chip-hover`, chip.pressed);
+    }
+    docRoot.setAttribute('data-ag-user-bubble-custom', '1');
+  }
   if (docRoot) {
     docRoot.setAttribute('data-ag-ux-lang', FEAT.i18n ? 'zh' : 'en');
     docRoot.setAttribute('data-ag-cjk-scale', currentCjkScale);
     applyFontSizeVars();
+    applyUserBubbleColorVars();
   }
 
   const userToggled = new WeakSet();
@@ -8161,6 +8316,75 @@
   let settingsStatsUnlinkedOpen = false;
   let settingsStatsBtnWrap = null;
 
+  const SVG_BUBBLE_CHECK =
+    '<svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3.5 8.5L6.5 11.5L12.5 4.5"/></svg>';
+  const SVG_BUBBLE_RESET =
+    '<svg width="15" height="15" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3.2 7.5a4.8 4.8 0 1 1 1.4 3.4"/><path d="M3.2 4.2v3.3h3.3"/></svg>';
+
+  function renderUserBubbleSettingsSection() {
+    const isCustomized = currentUserBubbleColor !== 'default';
+    return `
+      <div style="display:flex;flex-direction:column;gap:8px">
+        <h3 class="m-0">${escapeHtml(L('消息气泡', 'Message Bubble'))}</h3>
+        <div class="ag-cux-settings-group">
+          <div class="ag-cux-bubble-block" data-ag-cux-bubble-root>
+            <div class="ag-cux-bubble-head">
+              <div style="min-width:0">
+                <div class="ag-cux-settings-title">${escapeHtml(L('我的消息气泡颜色', 'My message bubble color'))}</div>
+                <div class="ag-cux-settings-desc">${escapeHtml(
+                  L(
+                    '深浅模式下自动调整明暗，保证文字清晰。仅保存在此电脑。',
+                    'Adjusts for light and dark mode so text stays readable. Saved on this computer only.'
+                  )
+                )}</div>
+              </div>
+              <div class="ag-cux-bubble-actions" data-ag-cux-bubble-actions${isCustomized ? '' : ' hidden'}>
+                <span class="ag-cux-bubble-badge" data-ag-cux-bubble-custom-badge>${escapeHtml(
+                  L('已自定义', 'Customized')
+                )}</span>
+                <button type="button" class="ag-cux-bubble-reset" data-ag-cux-bubble-reset aria-label="${escapeHtml(
+                  L('恢复默认气泡颜色', 'Reset to default bubble color')
+                )}" title="${escapeHtml(L('恢复默认', 'Reset to default'))}">${SVG_BUBBLE_RESET}</button>
+              </div>
+            </div>
+            <div class="ag-cux-bubble-preview">
+              <div class="ag-cux-bubble-preview-user" data-ag-cux-bubble-preview-user>${escapeHtml(
+                L('帮我整理一下今天的灵感。', 'Help me organize today’s ideas.')
+              )}</div>
+              <p class="ag-cux-bubble-preview-ai">${escapeHtml(
+                L('好的，我们一起把想法梳理清楚。', 'Sure, let’s work through your ideas together.')
+              )}</p>
+            </div>
+            <div class="ag-cux-bubble-presets" role="radiogroup" aria-label="${escapeHtml(L('颜色', 'Color'))}">
+              ${USER_BUBBLE_PRESET_META.map(
+                (p) => `
+                <button type="button" class="ag-cux-bubble-swatch-btn" role="radio" data-ag-cux-bubble-preset="${p.id}" aria-checked="${
+                  currentUserBubbleColor === p.id
+                }">
+                  <span class="ag-cux-bubble-swatch-dot" data-ag-cux-bubble-dot="${p.id}"></span>
+                  <span class="ag-cux-bubble-swatch-label">${escapeHtml(L(p.zh, p.en))}</span>
+                </button>`
+              ).join('')}
+            </div>
+            <button type="button" class="ag-cux-bubble-custom-btn" data-ag-cux-bubble-custom-toggle aria-pressed="${
+              userBubbleCustomOpen ? 'true' : 'false'
+            }">${escapeHtml(L('自定义颜色', 'Custom color'))}</button>
+            <div class="ag-cux-bubble-hue-wrap" data-ag-cux-bubble-hue-wrap${userBubbleCustomOpen ? '' : ' hidden'}>
+              <input type="range" min="0" max="359" step="1" class="ag-cux-bubble-hue-slider" data-ag-cux-bubble-hue aria-label="${escapeHtml(
+                L('色相', 'Hue')
+              )}" aria-valuetext="${escapeHtml(userBubbleDraftHex)}" value="${bubbleHexToHue(userBubbleDraftHex)}" />
+              <p class="ag-cux-bubble-hue-hint">${escapeHtml(
+                L(
+                  '左右拖动色带选择颜色。深浅模式下自动调整明暗，仅保存在此电脑。',
+                  'Drag the color strip to pick a hue. Adjusts for light and dark mode; saved on this computer only.'
+                )
+              )}</p>
+            </div>
+          </div>
+        </div>
+      </div>`;
+  }
+
   function renderSettingsPanelContent(panel) {
     if (!panel) return;
     panel.setAttribute('aria-label', L('界面增强设置', 'UI Enhancements Settings'));
@@ -8276,7 +8500,8 @@
                   : ''
               }
             </div>
-          </div>`
+          </div>
+          ${grp.id === 'lang-typo' ? renderUserBubbleSettingsSection() : ''}`
         ).join('')}
         ${COMPAT ? '<div data-ag-compat-section style="display:flex;flex-direction:column;gap:8px"></div>' : ''}
       </div>
@@ -8310,6 +8535,48 @@
         runBatchFixEnglishTitles();
       });
     }
+    panel.querySelectorAll('[data-ag-cux-bubble-preset]').forEach((btn) => {
+      btn.addEventListener('click', () => {
+        setUserBubbleColorOverride(btn.getAttribute('data-ag-cux-bubble-preset'));
+      });
+    });
+    const bubbleResetBtn = panel.querySelector('[data-ag-cux-bubble-reset]');
+    if (bubbleResetBtn) {
+      bubbleResetBtn.addEventListener('click', () => {
+        setUserBubbleColorOverride('default');
+      });
+    }
+    const bubbleCustomBtn = panel.querySelector('[data-ag-cux-bubble-custom-toggle]');
+    if (bubbleCustomBtn) {
+      bubbleCustomBtn.addEventListener('click', () => {
+        userBubbleCustomOpen = !userBubbleCustomOpen;
+        if (userBubbleCustomOpen) {
+          userBubbleDraftHex = bubblePickerSeed(currentUserBubbleColor);
+        } else if (userBubbleLiveHex) {
+          userBubbleLiveHex = null;
+          applyUserBubbleColorVars();
+        }
+        syncUserBubbleSettingsUi();
+      });
+    }
+    const bubbleHueInput = panel.querySelector('[data-ag-cux-bubble-hue]');
+    if (bubbleHueInput) {
+      bubbleHueInput.addEventListener('input', (e) => {
+        const hue = Number(e.target && e.target.value);
+        if (!Number.isFinite(hue)) return;
+        const nextHex = bubblePickerHueToHex(hue);
+        userBubbleDraftHex = nextHex;
+        userBubbleLiveHex = nextHex;
+        applyUserBubbleColorVars(nextHex);
+        syncUserBubbleSettingsUi();
+      });
+      bubbleHueInput.addEventListener('change', (e) => {
+        const hue = Number(e.target && e.target.value);
+        if (!Number.isFinite(hue)) return;
+        setUserBubbleColorOverride(bubblePickerHueToHex(hue));
+      });
+    }
+    syncUserBubbleSettingsUi();
   }
 
   function applyImmediateFeatureEffects(featKey, on) {
@@ -8413,6 +8680,7 @@
       cjkFontScale: currentCjkScale,
       uiFontSize: currentUiFontSize,
       chatFontSize: currentChatFontSize,
+      userBubbleColor: currentUserBubbleColor,
       uiState: {
         recentCollapsed: Boolean(recentCollapsed),
         unifiedRecentCollapsed: Boolean(unifiedRecentCollapsed)
@@ -8478,6 +8746,93 @@
     flashSettingsSavedToast();
   }
 
+  function setUserBubbleColorOverride(rawVal) {
+    const next = normalizeUserBubbleColor(rawVal);
+    if (!next) return;
+    currentUserBubbleColor = next;
+    localModOverrides.userBubbleColor = next;
+    userBubbleLiveHex = null;
+    if (next.startsWith('#')) {
+      userBubbleDraftHex = next;
+      userBubbleCustomOpen = true;
+    } else {
+      userBubbleCustomOpen = false;
+      userBubbleDraftHex = bubblePickerSeed(next);
+    }
+    applyUserBubbleColorVars();
+    persistUiPrefsToDaemon();
+    syncSettingsSwitchesUi();
+    flashSettingsSavedToast();
+  }
+
+  function syncUserBubbleSettingsUi() {
+    if (!settingsPanelEl) return;
+    const root = settingsPanelEl.querySelector('[data-ag-cux-bubble-root]');
+    if (!root) return;
+    const dark = isHostDarkTheme();
+    const mode = dark ? 'dark' : 'light';
+    const activePref = userBubbleLiveHex || currentUserBubbleColor;
+    const isCustomized = currentUserBubbleColor !== 'default';
+
+    const actionsEl = root.querySelector('[data-ag-cux-bubble-actions]');
+    if (actionsEl) actionsEl.hidden = !isCustomized;
+
+    const previewEl = root.querySelector('[data-ag-cux-bubble-preview-user]');
+    if (previewEl) {
+      const resolved = resolveUserBubbleColors(activePref, mode);
+      if (resolved) {
+        previewEl.style.backgroundColor = resolved.background;
+        previewEl.style.borderColor = resolved.border;
+        previewEl.style.color = resolved.foreground;
+      } else {
+        previewEl.style.backgroundColor = dark ? '#2C2C2A' : '#F3F3F0';
+        previewEl.style.borderColor = dark ? 'rgba(255, 255, 255, 0.08)' : 'rgba(20, 20, 19, 0.07)';
+        previewEl.style.color = dark ? '#ECECEA' : '#141413';
+      }
+    }
+
+    root.querySelectorAll('[data-ag-cux-bubble-preset]').forEach((btn) => {
+      const id = btn.getAttribute('data-ag-cux-bubble-preset');
+      const selected = currentUserBubbleColor === id && !userBubbleLiveHex;
+      btn.setAttribute('aria-checked', String(selected));
+      const dot = btn.querySelector('[data-ag-cux-bubble-dot]');
+      if (dot) {
+        const swatch = resolveUserBubbleColors(id, mode);
+        dot.style.backgroundColor = swatch ? swatch.background : dark ? '#2C2C2A' : '#FFFFFF';
+        dot.style.borderColor = selected ? '' : swatch ? swatch.border : '';
+        dot.style.color = swatch ? swatch.foreground : dark ? '#ECECEA' : '#141413';
+        dot.innerHTML = selected ? SVG_BUBBLE_CHECK : '';
+      }
+    });
+
+    const customBtn = root.querySelector('[data-ag-cux-bubble-custom-toggle]');
+    if (customBtn) customBtn.setAttribute('aria-pressed', String(Boolean(userBubbleCustomOpen)));
+
+    const hueWrap = root.querySelector('[data-ag-cux-bubble-hue-wrap]');
+    if (hueWrap) hueWrap.hidden = !userBubbleCustomOpen;
+
+    const hueInput = root.querySelector('[data-ag-cux-bubble-hue]');
+    if (hueInput) {
+      const hue = String(bubbleHexToHue(userBubbleDraftHex));
+      if (hueInput.value !== hue) hueInput.value = hue;
+      hueInput.setAttribute('aria-valuetext', userBubbleDraftHex);
+    }
+  }
+
+  let themeBubbleObserver = null;
+  if (typeof MutationObserver === 'function' && docRoot) {
+    themeBubbleObserver = new MutationObserver(() => {
+      if (disposed) return;
+      if (settingsPanelEl && !settingsPanelEl.hidden) {
+        syncUserBubbleSettingsUi();
+      }
+    });
+    themeBubbleObserver.observe(docRoot, { attributes: true, attributeFilter: ['data-ag-theme-mode'] });
+    if (document.body) {
+      themeBubbleObserver.observe(document.body, { attributes: true, attributeFilter: ['class'] });
+    }
+  }
+
   function syncSettingsSwitchesUi() {
     if (!settingsPanelEl) return;
     for (const grp of SETTINGS_GROUPS) {
@@ -8495,6 +8850,7 @@
     settingsPanelEl.querySelectorAll('[data-ag-cux-cjk-scale]').forEach((btn) => {
       btn.setAttribute('aria-checked', String(btn.getAttribute('data-ag-cux-cjk-scale') === currentCjkScale));
     });
+    syncUserBubbleSettingsUi();
   }
 
   function closeClaudeUxSettingsPane() {
@@ -15522,6 +15878,13 @@
       if (hadDocLang && origDocLang !== null) docRoot.setAttribute('lang', origDocLang);
       else docRoot.removeAttribute('lang');
     }
+    if (themeBubbleObserver) {
+      try {
+        themeBubbleObserver.disconnect();
+      } catch {}
+      themeBubbleObserver = null;
+    }
+    clearUserBubbleColorVars();
     if (docRoot) {
       docRoot.removeAttribute('data-ag-ux-lang');
       docRoot.removeAttribute('data-ag-cjk-scale');

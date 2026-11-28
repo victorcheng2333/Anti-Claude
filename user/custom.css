@@ -1025,7 +1025,7 @@ html:not([data-ag-theme-mode="dark"]) body:not(.dark) #antigravity\.agentSidePan
   stroke: #191918 !important;
 }
 
-/* 3.4 Borderless filled user message bubbles */
+/* 3.4 Cindy-inspired 12px rounded user message bubbles with subtle 0.5px border */
 [data-testid="user-input-step"],
 .agy-user-bubble {
   --card: var(--ag-user-bubble) !important;
@@ -1036,9 +1036,65 @@ html:not([data-ag-theme-mode="dark"]) body:not(.dark) #antigravity\.agentSidePan
 
 .agy-user-bubble {
   background-color: var(--ag-user-bubble) !important;
-  border-color: transparent !important;
+  border: 0.5px solid rgba(20, 20, 19, 0.07) !important;
+  border-radius: 12px !important;
   box-shadow: none !important;
-  padding: 6px 12px !important;
+  padding: 9px 15px !important;
+}
+
+:is(html[data-ag-theme-mode="dark"] body, body.dark) .agy-user-bubble {
+  border-color: rgba(255, 255, 255, 0.08) !important;
+}
+
+/* 3.4b User-selected message bubble tint (light & dark auto-derived, zero flash on theme switch) */
+html[data-ag-user-bubble-custom="1"]:not([data-ag-theme-mode="dark"]) body:not(.dark) :is([data-testid="user-input-step"], .agy-user-bubble) {
+  --ag-user-bubble: var(--ag-user-bubble-light-bg) !important;
+  --ag-user-bubble-fg: var(--ag-user-bubble-light-fg) !important;
+  --ag-user-bubble-border: var(--ag-user-bubble-light-border) !important;
+  --ag-user-bubble-chip-bg: var(--ag-user-bubble-light-chip-bg) !important;
+  --ag-user-bubble-chip-hover: var(--ag-user-bubble-light-chip-hover) !important;
+  --card: var(--ag-user-bubble-light-bg) !important;
+  --color-card: var(--ag-user-bubble-light-bg) !important;
+  --card-border: transparent !important;
+  --color-card-border: transparent !important;
+}
+
+:is(html[data-ag-user-bubble-custom="1"][data-ag-theme-mode="dark"] body, html[data-ag-user-bubble-custom="1"] body.dark) :is([data-testid="user-input-step"], .agy-user-bubble) {
+  --ag-user-bubble: var(--ag-user-bubble-dark-bg) !important;
+  --ag-user-bubble-fg: var(--ag-user-bubble-dark-fg) !important;
+  --ag-user-bubble-border: var(--ag-user-bubble-dark-border) !important;
+  --ag-user-bubble-chip-bg: var(--ag-user-bubble-dark-chip-bg) !important;
+  --ag-user-bubble-chip-hover: var(--ag-user-bubble-dark-chip-hover) !important;
+  --card: var(--ag-user-bubble-dark-bg) !important;
+  --color-card: var(--ag-user-bubble-dark-bg) !important;
+  --card-border: transparent !important;
+  --color-card-border: transparent !important;
+}
+
+html[data-ag-user-bubble-custom="1"] .agy-user-bubble {
+  background-color: var(--ag-user-bubble) !important;
+  color: var(--ag-user-bubble-fg) !important;
+  border: 0.5px solid var(--ag-user-bubble-border) !important;
+}
+
+html[data-ag-user-bubble-custom="1"] .agy-user-bubble :is(p, span, div, li, .select-text):not(a):not(a *):not([data-testid="skill-scope-item-pill"]):not([data-testid="skill-scope-item-pill"] *):not(bdi.context-scope-mention):not(bdi.context-scope-mention *) {
+  color: var(--ag-user-bubble-fg) !important;
+}
+
+html[data-ag-user-bubble-custom="1"] .agy-user-bubble :not(pre) > code {
+  background-color: var(--ag-user-bubble-chip-bg) !important;
+  border: 0.5px solid var(--ag-user-bubble-border) !important;
+  color: var(--ag-user-bubble-fg) !important;
+}
+
+html[data-ag-user-bubble-custom="1"] .agy-user-bubble :is(bdi.context-scope-mention [role="button"], [data-testid="skill-scope-item-pill"]) {
+  background-color: var(--ag-user-bubble-chip-bg) !important;
+  border-color: var(--ag-user-bubble-border) !important;
+  color: var(--ag-user-bubble-fg) !important;
+}
+
+html[data-ag-user-bubble-custom="1"] .agy-user-bubble :is(bdi.context-scope-mention [role="button"], [data-testid="skill-scope-item-pill"]):hover {
+  background-color: var(--ag-user-bubble-chip-hover) !important;
 }
 
 /* 3.5 Clean neutral inline code & file mention pills */
@@ -3810,6 +3866,288 @@ html:not([data-ag-theme-mode="dark"]) body:not(.dark) .ag-cux-action-btn:hover:n
 .ag-cux-action-btn:disabled {
   opacity: 0.6 !important;
   cursor: default !important;
+}
+
+/* Settings › My Message Bubble Color (Cindy-inspired preview, 7 preset swatches & hue strip) */
+.ag-cux-bubble-block {
+  padding: 15px 16px 16px !important;
+  display: flex !important;
+  flex-direction: column !important;
+  gap: 12px !important;
+}
+
+.ag-cux-bubble-head {
+  display: flex !important;
+  align-items: flex-start !important;
+  justify-content: space-between !important;
+  gap: 12px !important;
+}
+
+.ag-cux-bubble-actions {
+  display: inline-flex !important;
+  align-items: center !important;
+  gap: 8px !important;
+  flex-shrink: 0 !important;
+}
+
+.ag-cux-bubble-actions[hidden],
+.ag-cux-bubble-badge[hidden],
+.ag-cux-bubble-reset[hidden],
+.ag-cux-bubble-hue-wrap[hidden] {
+  display: none !important;
+}
+
+.ag-cux-bubble-badge {
+  display: inline-flex !important;
+  align-items: center !important;
+  height: 18px !important;
+  padding: 1px 8px !important;
+  border-radius: 9999px !important;
+  font-size: 11px !important;
+  font-weight: 500 !important;
+  line-height: 1.45 !important;
+  white-space: nowrap !important;
+}
+
+html:not([data-ag-theme-mode="dark"]) body:not(.dark) .ag-cux-bubble-badge {
+  background-color: #EFEFED !important;
+  color: #52524E !important;
+}
+
+:is(html[data-ag-theme-mode="dark"] body, body.dark) .ag-cux-bubble-badge {
+  background-color: rgba(255, 255, 255, 0.09) !important;
+  color: #B8B7B2 !important;
+}
+
+.ag-cux-bubble-reset {
+  appearance: none !important;
+  border: none !important;
+  background: transparent !important;
+  width: 28px !important;
+  height: 28px !important;
+  padding: 0 !important;
+  border-radius: 9999px !important;
+  display: inline-flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  cursor: pointer !important;
+  color: var(--muted-foreground, #73726C) !important;
+  transition: background-color 120ms ease, color 120ms ease !important;
+}
+
+html:not([data-ag-theme-mode="dark"]) body:not(.dark) .ag-cux-bubble-reset:hover {
+  background-color: rgba(0, 0, 0, 0.055) !important;
+  color: #191918 !important;
+}
+
+:is(html[data-ag-theme-mode="dark"] body, body.dark) .ag-cux-bubble-reset:hover {
+  background-color: rgba(255, 255, 255, 0.08) !important;
+  color: #ECECEA !important;
+}
+
+.ag-cux-bubble-preview {
+  border-radius: 12px !important;
+  padding: 12px !important;
+  display: flex !important;
+  flex-direction: column !important;
+  gap: 8px !important;
+}
+
+html:not([data-ag-theme-mode="dark"]) body:not(.dark) .ag-cux-bubble-preview {
+  background-color: #F9F9F8 !important;
+}
+
+:is(html[data-ag-theme-mode="dark"] body, body.dark) .ag-cux-bubble-preview {
+  background-color: #212120 !important;
+}
+
+.ag-cux-bubble-preview-user {
+  align-self: flex-end !important;
+  max-width: 86% !important;
+  border-radius: 12px !important;
+  padding: 9px 15px !important;
+  border: 0.5px solid transparent !important;
+  font-family: var(--font-sans) !important;
+  font-size: var(--ag-chat-font-size, 14px) !important;
+  font-weight: 400 !important;
+  line-height: 1.5 !important;
+  transition: background-color 120ms ease, border-color 120ms ease, color 120ms ease !important;
+}
+
+.ag-cux-bubble-preview-ai {
+  align-self: flex-start !important;
+  max-width: 86% !important;
+  margin: 0 !important;
+  font-family: var(--font-sans) !important;
+  font-size: var(--ag-chat-font-size, 14px) !important;
+  font-weight: 400 !important;
+  line-height: 1.5 !important;
+  color: var(--foreground, #141413) !important;
+}
+
+.ag-cux-bubble-presets {
+  display: flex !important;
+  flex-wrap: wrap !important;
+  gap: 12px 6px !important;
+}
+
+.ag-cux-bubble-swatch-btn {
+  appearance: none !important;
+  border: none !important;
+  background: transparent !important;
+  min-width: 68px !important;
+  width: auto !important;
+  padding: 2px 3px !important;
+  display: flex !important;
+  flex-direction: column !important;
+  align-items: center !important;
+  gap: 6px !important;
+  cursor: pointer !important;
+  border-radius: 8px !important;
+  outline: none !important;
+}
+
+.ag-cux-bubble-swatch-btn:focus-visible .ag-cux-bubble-swatch-dot {
+  box-shadow: 0 0 0 2px var(--primary, #2F75C3) !important;
+}
+
+.ag-cux-bubble-swatch-dot {
+  width: 32px !important;
+  height: 32px !important;
+  border-radius: 9999px !important;
+  border: 0.5px solid rgba(0, 0, 0, 0.14) !important;
+  display: flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  color: var(--foreground, #141413) !important;
+  transition: transform 120ms ease, border-color 120ms ease !important;
+}
+
+:is(html[data-ag-theme-mode="dark"] body, body.dark) .ag-cux-bubble-swatch-dot {
+  border-color: rgba(255, 255, 255, 0.18) !important;
+}
+
+.ag-cux-bubble-swatch-btn:hover .ag-cux-bubble-swatch-dot {
+  transform: scale(1.05) !important;
+}
+
+.ag-cux-bubble-swatch-btn[aria-checked="true"] .ag-cux-bubble-swatch-dot {
+  border-width: 0.5px !important;
+  border-color: var(--foreground, #141413) !important;
+}
+
+:is(html[data-ag-theme-mode="dark"] body, body.dark) .ag-cux-bubble-swatch-btn[aria-checked="true"] .ag-cux-bubble-swatch-dot {
+  border-color: var(--foreground, #ECECEA) !important;
+}
+
+.ag-cux-bubble-swatch-label {
+  font-family: var(--font-sans) !important;
+  font-size: 11px !important;
+  line-height: 1.3 !important;
+  white-space: nowrap !important;
+  color: var(--muted-foreground, #73726C) !important;
+}
+
+.ag-cux-bubble-custom-btn {
+  appearance: none !important;
+  width: 100% !important;
+  height: 32px !important;
+  border-radius: 9999px !important;
+  font-family: var(--font-sans) !important;
+  font-size: 12.5px !important;
+  font-weight: 500 !important;
+  line-height: 1 !important;
+  cursor: pointer !important;
+  transition: background-color 120ms ease, border-color 120ms ease !important;
+}
+
+html:not([data-ag-theme-mode="dark"]) body:not(.dark) .ag-cux-bubble-custom-btn {
+  background-color: #FFFFFF !important;
+  border: 0.5px solid rgba(0, 0, 0, 0.14) !important;
+  color: #191918 !important;
+}
+
+html:not([data-ag-theme-mode="dark"]) body:not(.dark) .ag-cux-bubble-custom-btn:hover {
+  background-color: #F6F6F4 !important;
+}
+
+html:not([data-ag-theme-mode="dark"]) body:not(.dark) .ag-cux-bubble-custom-btn[aria-pressed="true"] {
+  background-color: #F2F1EE !important;
+}
+
+:is(html[data-ag-theme-mode="dark"] body, body.dark) .ag-cux-bubble-custom-btn {
+  background-color: #242422 !important;
+  border: 0.5px solid rgba(255, 255, 255, 0.14) !important;
+  color: #ECECEA !important;
+}
+
+:is(html[data-ag-theme-mode="dark"] body, body.dark) .ag-cux-bubble-custom-btn:hover {
+  background-color: #2E2E2B !important;
+}
+
+:is(html[data-ag-theme-mode="dark"] body, body.dark) .ag-cux-bubble-custom-btn[aria-pressed="true"] {
+  background-color: #32322F !important;
+}
+
+.ag-cux-bubble-hue-wrap {
+  display: flex !important;
+  flex-direction: column !important;
+  gap: 6px !important;
+  padding-top: 2px !important;
+}
+
+.ag-cux-bubble-hue-slider {
+  appearance: none !important;
+  -webkit-appearance: none !important;
+  width: 100% !important;
+  height: 28px !important;
+  padding: 0 !important;
+  margin: 0 !important;
+  border: none !important;
+  background: transparent !important;
+  outline: none !important;
+  cursor: ew-resize !important;
+}
+
+.ag-cux-bubble-hue-slider::-webkit-slider-runnable-track {
+  width: 100% !important;
+  height: 6px !important;
+  border-radius: 9999px !important;
+  border: none !important;
+  background: linear-gradient(to right, #e63939, #e6e639, #39e639, #39e6e6, #3939e6, #e639e6, #e63939) !important;
+}
+
+.ag-cux-bubble-hue-slider::-webkit-slider-thumb {
+  -webkit-appearance: none !important;
+  width: 16px !important;
+  height: 16px !important;
+  margin-top: -5px !important;
+  border-radius: 9999px !important;
+  background: #FFFFFF !important;
+  border: 0 !important;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.24), 0 0 0 0.5px rgba(0, 0, 0, 0.10) !important;
+  transition: width 150ms ease-out, height 150ms ease-out, margin-top 150ms ease-out !important;
+  cursor: ew-resize !important;
+}
+
+.ag-cux-bubble-hue-slider:hover::-webkit-slider-thumb {
+  width: 18px !important;
+  height: 18px !important;
+  margin-top: -6px !important;
+}
+
+.ag-cux-bubble-hue-slider:active::-webkit-slider-thumb {
+  width: 22px !important;
+  height: 16px !important;
+  margin-top: -5px !important;
+}
+
+.ag-cux-bubble-hue-hint {
+  margin: 0 !important;
+  font-family: var(--font-sans) !important;
+  font-size: 11.5px !important;
+  line-height: 1.45 !important;
+  color: var(--muted-foreground, #73726C) !important;
 }
 
 /* Settings › Compatibility: host-dependency status badges (own elements only, no host overrides needed) */

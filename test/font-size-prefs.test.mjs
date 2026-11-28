@@ -53,3 +53,45 @@ test('saveUiPrefs rejects out-of-range font sizes while preserving previously va
   assert.equal(persisted.uiFontSize, '13');
   assert.equal(persisted.chatFontSize, '15');
 });
+
+test('saveUiPrefs normalizes, persists, resets, and validates userBubbleColor', () => {
+  const preset = saveUiPrefs({
+    updatedAt: 1700000000300,
+    userBubbleColor: 'sage'
+  });
+  assert.equal(preset.userBubbleColor, 'sage');
+
+  const customHex = saveUiPrefs({
+    updatedAt: 1700000000400,
+    userBubbleColor: '#A1B2C3'
+  });
+  assert.equal(customHex.userBubbleColor, '#a1b2c3');
+
+  const invalid = saveUiPrefs({
+    updatedAt: 1700000000500,
+    userBubbleColor: 'red;background:blue'
+  });
+  assert.equal(invalid.userBubbleColor, '#a1b2c3');
+
+  const shortHex = saveUiPrefs({
+    updatedAt: 1700000000600,
+    userBubbleColor: '#123'
+  });
+  assert.equal(shortHex.userBubbleColor, '#a1b2c3');
+
+  const omitted = saveUiPrefs({
+    updatedAt: 1700000000700,
+    chatFontSize: '14'
+  });
+  assert.equal(omitted.userBubbleColor, '#a1b2c3');
+
+  const reset = saveUiPrefs({
+    updatedAt: 1700000000800,
+    userBubbleColor: 'default'
+  });
+  assert.equal(reset.userBubbleColor, 'default');
+
+  const prefsFile = path.join(tempStateDir, 'ui-prefs.json');
+  const persisted = JSON.parse(fs.readFileSync(prefsFile, 'utf8'));
+  assert.equal(persisted.userBubbleColor, 'default');
+});
