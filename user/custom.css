@@ -754,38 +754,18 @@ html:not([data-ag-theme-mode="dark"]) body:not(.dark) :is(#antigravity\.agentSid
   opacity: 1 !important;
 }
 
-#ag-live-metrics-pill:not([data-ag-row-mode="bottom"]) {
+#ag-live-metrics-pill:not([data-ag-row-mode="bottom"]):not([data-ag-row-mode="hidden"]) {
   margin-left: auto !important;
   margin-right: auto !important;
   padding: 0 8px !important;
   justify-content: center !important;
 }
 
+#antigravity\.agentSidePanelInputBox #ag-live-metrics-pill[data-ag-row-mode="hidden"],
+#ag-live-metrics-pill#ag-live-metrics-pill[data-ag-row-mode="hidden"],
 #antigravity\.agentSidePanelInputBox #ag-live-metrics-pill[data-ag-row-mode="bottom"],
 #ag-live-metrics-pill#ag-live-metrics-pill[data-ag-row-mode="bottom"] {
-  display: flex !important;
-  justify-content: center !important;
-  align-items: center !important;
-  text-align: center !important;
-  padding: 3px 8px 1px !important;
-  border-top-style: solid !important;
-  border-top-width: 1px !important;
-}
-
-html:not([data-ag-theme-mode="dark"]) body:not(.dark) :is(#antigravity\.agentSidePanelInputBox #ag-live-metrics-pill[data-ag-row-mode="bottom"], #ag-live-metrics-pill#ag-live-metrics-pill[data-ag-row-mode="bottom"]) {
-  border-top-color: rgba(25, 25, 24, 0.06) !important;
-}
-
-:is(html[data-ag-theme-mode="dark"] body, body.dark) :is(#antigravity\.agentSidePanelInputBox #ag-live-metrics-pill[data-ag-row-mode="bottom"], #ag-live-metrics-pill#ag-live-metrics-pill[data-ag-row-mode="bottom"]) {
-  border-top-color: rgba(255, 255, 255, 0.07) !important;
-}
-
-#antigravity\.agentSidePanelInputBox #ag-live-metrics-pill[data-ag-row-mode="bottom"] #ag-live-metrics-text,
-#ag-live-metrics-pill#ag-live-metrics-pill[data-ag-row-mode="bottom"] #ag-live-metrics-text {
-  width: auto !important;
-  max-width: 100% !important;
-  margin-inline: auto !important;
-  text-align: center !important;
+  display: none !important;
 }
 
 /* 3.2a Minimalist Claude-style Metrics Popover (#ag-live-metrics-tooltip:has(> .ag-ux-tt)) */
@@ -2100,11 +2080,11 @@ html:not([data-ag-theme-mode="dark"]) body:not(.dark) .ag-cm-row:is(:hover, [dat
   transition: background-color 140ms ease !important;
 }
 
-html:not([data-ag-theme-mode="dark"]) body:not(.dark) #antigravity\.agentSidePanelInputBox #ag-claude-ctx-ring:is(:hover, [data-open="true"]) {
+html:not([data-ag-theme-mode="dark"]) body:not(.dark) #antigravity\.agentSidePanelInputBox #ag-claude-ctx-ring[data-open="true"] {
   background-color: #EFEFED !important;
 }
 
-:is(html[data-ag-theme-mode="dark"] body, body.dark) #antigravity\.agentSidePanelInputBox #ag-claude-ctx-ring:is(:hover, [data-open="true"]) {
+:is(html[data-ag-theme-mode="dark"] body, body.dark) #antigravity\.agentSidePanelInputBox #ag-claude-ctx-ring[data-open="true"] {
   background-color: rgba(255, 255, 255, 0.09) !important;
 }
 

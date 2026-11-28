@@ -807,6 +807,9 @@
   let quotaHoldTimer = 0;
   let quotaWarmupDone = false;
   let quotaPopoverOpen = false;
+  let quotaPopoverPinned = false;
+  let quotaHoverOpenTimer = 0;
+  let quotaHoverCloseTimer = 0;
   let selectedQuotaGroupIdx = -1;
   function persistQuotaSnapshot() {
     if (!Array.isArray(cachedQuotaGroups) || cachedQuotaGroups.length === 0) return;
@@ -1951,6 +1954,38 @@
     return 'var(--primary, #2F75C3)';
   }
 
+  const QUOTA_HOVER_OPEN_DELAY_MS = 180;
+  const QUOTA_HOVER_CLOSE_DELAY_MS = 200;
+
+  function clearQuotaHoverTimers() {
+    cancelLater(quotaHoverOpenTimer);
+    quotaHoverOpenTimer = 0;
+    cancelLater(quotaHoverCloseTimer);
+    quotaHoverCloseTimer = 0;
+  }
+
+  function scheduleQuotaHoverOpen() {
+    clearQuotaHoverTimers();
+    if (disposed || !FEAT.contextRing || quotaPopoverOpen || modelPopoverOpen) return;
+    quotaHoverOpenTimer = later(() => {
+      quotaHoverOpenTimer = 0;
+      if (!disposed && FEAT.contextRing && !quotaPopoverOpen && !modelPopoverOpen) {
+        openQuotaPopover({ pinned: false });
+      }
+    }, QUOTA_HOVER_OPEN_DELAY_MS);
+  }
+
+  function scheduleQuotaHoverClose() {
+    clearQuotaHoverTimers();
+    if (!quotaPopoverOpen || quotaPopoverPinned) return;
+    quotaHoverCloseTimer = later(() => {
+      quotaHoverCloseTimer = 0;
+      if (!disposed && quotaPopoverOpen && !quotaPopoverPinned) {
+        closeQuotaPopover();
+      }
+    }, QUOTA_HOVER_CLOSE_DELAY_MS);
+  }
+
   function ensureQuotaPopover() {
     let pop = document.getElementById('ag-claude-quota-popover');
     if (pop) return pop;
@@ -1958,6 +1993,12 @@
     pop.id = 'ag-claude-quota-popover';
     pop.setAttribute('data-ag-i18n-ignore', '1');
     pop.setAttribute('data-open', 'false');
+    pop.addEventListener('pointerenter', () => {
+      clearQuotaHoverTimers();
+    });
+    pop.addEventListener('pointerleave', () => {
+      scheduleQuotaHoverClose();
+    });
     pop.addEventListener('click', (e) => {
       const compactBtn = e.target.closest('[data-ag-qp-compact]');
       if (compactBtn) {
@@ -2161,11 +2202,14 @@
     positionQuotaPopover();
   }
 
-  function openQuotaPopover() {
+  function openQuotaPopover(opts) {
+    clearQuotaHoverTimers();
+    const pinned = !opts || opts.pinned !== false;
     if (typeof closeClaudeModelPopover === 'function' && modelPopoverOpen) {
       closeClaudeModelPopover();
     }
     quotaPopoverOpen = true;
+    quotaPopoverPinned = pinned;
     selectedQuotaGroupIdx = -1;
     discoverQuotaService(true);
     const needForce = !cachedQuotaGroups || Date.now() - lastForceQuotaFetchTs > 5000;
@@ -2173,6 +2217,7 @@
     const ring = document.getElementById('ag-claude-ctx-ring');
     if (ring) ring.setAttribute('data-open', 'true');
     const pop = ensureQuotaPopover();
+    pop.setAttribute('data-pinned', pinned ? 'true' : 'false');
     if (!cachedQuotaGroups && quotaFetchInFlight) {
       pop.setAttribute('data-loading-hold', 'true');
       cancelLater(quotaHoldTimer);
@@ -2189,7 +2234,9 @@
   }
 
   function closeQuotaPopover() {
+    clearQuotaHoverTimers();
     quotaPopoverOpen = false;
+    quotaPopoverPinned = false;
     cancelLater(quotaHoldTimer);
     quotaHoldTimer = 0;
     const ring = document.getElementById('ag-claude-ctx-ring');
@@ -2197,6 +2244,7 @@
     const pop = document.getElementById('ag-claude-quota-popover');
     if (pop) {
       pop.removeAttribute('data-loading-hold');
+      pop.removeAttribute('data-pinned');
       pop.setAttribute('data-open', 'false');
     }
   }
@@ -2209,6 +2257,7 @@
     const compactStatus = detectCompactStatus(curCid);
     const { preUsed, limitLabel, summaryLabel, summaryPct } = extractCompactLabels(latestCtxState, curCid);
     const arc = ring.querySelector('.ag-ctx-ring-arc');
+    ring.removeAttribute('title');
 
     if (compactStatus === 'compacting') {
       const pct = 18;
@@ -2218,9 +2267,12 @@
       }
       ring.setAttribute('data-level', 'normal');
       ring.setAttribute('data-compact-state', 'compacting');
-      ring.title = preUsed
-        ? L(`正在压缩上下文 (原 ${preUsed})… · 点击查看状态`, `Compacting context (was ${preUsed})… · Click for status`)
-        : L('正在压缩上下文… · 点击查看状态', 'Compacting context… · Click for status');
+      ring.setAttribute(
+        'aria-label',
+        preUsed
+          ? L(`正在压缩上下文 (原 ${preUsed})`, `Compacting context (was ${preUsed})`)
+          : L('正在压缩上下文', 'Compacting context')
+      );
       return;
     }
 
@@ -2232,13 +2284,15 @@
       }
       ring.setAttribute('data-level', 'normal');
       ring.setAttribute('data-compact-state', 'compacted');
-      ring.title =
+      ring.setAttribute(
+        'aria-label',
         summaryLabel && limitLabel
           ? L(
-              `当前上下文 ${summaryLabel} / ${limitLabel} (${summaryPct}%${preUsed ? ` · 原 ${preUsed} 已压缩` : ''}) · 点击查看套餐限额`,
-              `Context ${summaryLabel} / ${limitLabel} (${summaryPct}%${preUsed ? ` · compacted from ${preUsed}` : ''}) · Click for plan usage`
+              `当前上下文 ${summaryLabel} / ${limitLabel} (${summaryPct}%${preUsed ? ` · 原 ${preUsed} 已压缩` : ''})`,
+              `Context ${summaryLabel} / ${limitLabel} (${summaryPct}%${preUsed ? ` · compacted from ${preUsed}` : ''})`
             )
-          : L('当前上下文已压缩 · 点击查看套餐限额', 'Context compacted · Click for plan usage');
+          : L('当前上下文已压缩', 'Context compacted')
+      );
       return;
     }
 
@@ -2253,12 +2307,12 @@
       else if (pct >= 70) level = 'warn';
       ring.setAttribute('data-level', level);
     }
-    ring.title = hasCtx
-      ? L(
-          `当前上下文 ${latestCtxState.ratioText} (${pct}%) · 点击查看套餐限额`,
-          `Context ${latestCtxState.ratioText} (${pct}%) · Click for plan usage`
-        )
-      : L('当前会话暂无上下文消耗 · 点击查看套餐限额', 'No context usage yet · Click for plan usage');
+    ring.setAttribute(
+      'aria-label',
+      hasCtx
+        ? L(`当前上下文 ${latestCtxState.ratioText} (${pct}%)`, `Context ${latestCtxState.ratioText} (${pct}%)`)
+        : L('上下文与套餐使用限额', 'Context window & plan usage')
+    );
   }
 
   function ensureComposerContextRing() {
@@ -2310,13 +2364,32 @@
         if (!quotaPopoverOpen && (!cachedQuotaGroups || Date.now() - lastForceQuotaFetchTs > 10000)) {
           fetchQuotaSummary(true);
         }
+        if (quotaPopoverOpen) {
+          clearQuotaHoverTimers();
+        } else {
+          scheduleQuotaHoverOpen();
+        }
+      });
+      ring.addEventListener('pointerleave', () => {
+        if (quotaPopoverOpen) {
+          scheduleQuotaHoverClose();
+        } else {
+          clearQuotaHoverTimers();
+        }
       });
       ring.addEventListener('click', (e) => {
         e.stopPropagation();
+        clearQuotaHoverTimers();
         if (quotaPopoverOpen) {
-          closeQuotaPopover();
+          if (!quotaPopoverPinned) {
+            quotaPopoverPinned = true;
+            const pop = document.getElementById('ag-claude-quota-popover');
+            if (pop) pop.setAttribute('data-pinned', 'true');
+          } else {
+            closeQuotaPopover();
+          }
         } else {
-          openQuotaPopover();
+          openQuotaPopover({ pinned: true });
         }
       });
     }
@@ -2436,7 +2509,9 @@
       while ((node = walker.nextNode())) {
         const raw = node.nodeValue;
         if (!raw) continue;
-        let next = raw.replace(/编排器\s*\(([^)]+)\)/g, 'Orchestrator ($1)');
+        let next = raw.replace(/编排器\s*\(([^)]+)\)/g, 'Orch ($1)');
+        next = next.replace(/编排器(?=\s|$)/g, 'Orch');
+        next = next.replace(/\bOrchestrator\b/gi, 'Orch');
         next = next.replace(/\b(?:Extra High|XHigh)\b/g, 'Extra');
         if (next !== raw) node.nodeValue = next;
       }
@@ -2490,8 +2565,8 @@
       .replace(/^Select model,\s*current:\s*/i, '')
       .replace(/\s*·\s*[^·]*$/, '')
       .trim();
-    if (!/^(?:Orchestrator|编排器)\s+/i.test(txt)) return null;
-    txt = txt.replace(/^(?:Orchestrator|编排器)\s+/i, '').trim();
+    if (!/^(?:Orchestrator|Orch|编排器)\s+/i.test(txt)) return null;
+    txt = txt.replace(/^(?:Orchestrator|Orch|编排器)\s+/i, '').trim();
     const m = txt.match(/^(.*?)\s+(Low|Medium|High|Extra High|XHigh|Extra|Max)$/i);
     const wantedBase = (m ? m[1] : txt).trim().toLowerCase();
     const rawEff = m ? m[2].toLowerCase() : '';
@@ -3777,20 +3852,7 @@
     const moreExecCat = mainExecCat || (moreHasOrch ? buildExecutorCatalog(api) : null);
     const moreHasContent = cat.moreFamilies.length > 0 || Boolean(moreExecCat && moreExecCat.families.length > 0);
 
-    const rawTooltipNote = typeof api?.tooltipNote === 'string' ? api.tooltipNote.trim() : '';
-    const tooltipNoteText =
-      rawTooltipNote === 'Applies to /btw and messages sent after this turn'
-        ? L('将用于 /btw 及本轮之后的新消息', rawTooltipNote)
-        : rawTooltipNote === 'Applies to messages sent after this turn'
-          ? L('将用于本轮之后的新消息', rawTooltipNote)
-          : rawTooltipNote;
-    const tooltipNoteHtml = tooltipNoteText
-      ? `<div class="ag-cm-note" data-ag-cm-note="1">${escapeHtml(tooltipNoteText)}</div>`
-      : '';
-
     mainPop.innerHTML = `
-      <div class="ag-cm-sec-hdr">${L('模型 · 本次会话', 'Models · This chat')}</div>
-      ${tooltipNoteHtml}
       <div>${primaryRowsHtml}</div>
       <div class="ag-cm-divider"></div>
       <button type="button" class="ag-cm-row" data-ag-cm-hover="${

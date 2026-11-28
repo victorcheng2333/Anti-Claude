@@ -752,6 +752,7 @@ test('context ring & quota popover: adds inline compact button and immediately c
   const ring = h.doc.getElementById('ag-claude-ctx-ring');
   assert.ok(ring, 'context ring mounted');
   assert.equal(ring.getAttribute('data-level'), 'crit');
+  assert.equal(ring.hasAttribute('title'), false, 'context ring has no native hover title tooltip');
 
   ring.click();
   const pop = h.doc.getElementById('ag-claude-quota-popover');
@@ -821,27 +822,27 @@ test('context ring & quota popover: adds inline compact button and immediately c
   assert.match(h.window.__ag_last_metrics.tooltipHtml, /was 483k/);
   assert.equal(h.window.__ag_last_metrics.tooltipHtml.includes('94%'), false);
 
-  /* 3c. Bottom metrics pill CSS centering & centered tooltip positioning in narrow window mode */
+  /* 3c. Narrow window hides metrics pill instead of wrapping onto a second bottom row */
   const customCss = fs.readFileSync(path.join(REPO, 'user', 'custom.css'), 'utf8');
   assert.match(
     customCss,
-    /#ag-live-metrics-pill\[data-ag-row-mode="bottom"\][\s\S]*?justify-content:\s*center\s*!important/,
-    'custom.css centers bottom-row metrics pill'
+    /#ag-live-metrics-pill\[data-ag-row-mode="hidden"\][\s\S]*?display:\s*none\s*!important/,
+    'custom.css hides metrics pill when narrow instead of wrapping onto a second row'
   );
   const pillEl = h.doc.getElementById('ag-live-metrics-pill');
-  pillEl.setAttribute('data-ag-row-mode', 'bottom');
+  pillEl.setAttribute('data-ag-row-mode', 'middle');
   const textEl = h.doc.createElement('span');
   textEl.id = 'ag-live-metrics-text';
   textEl.textContent = '110 tok/s · TTFT 10.9s';
   Object.defineProperty(textEl, 'offsetWidth', { value: 120, configurable: true });
-  pillEl.getBoundingClientRect = () => ({ left: 40, top: 500, width: 420, height: 22, right: 460, bottom: 522 });
-  textEl.getBoundingClientRect = () => ({ left: 190, top: 502, width: 120, height: 18, right: 310, bottom: 520 });
+  pillEl.getBoundingClientRect = () => ({ left: 40, top: 500, width: 120, height: 22, right: 160, bottom: 522 });
+  textEl.getBoundingClientRect = () => ({ left: 44, top: 502, width: 120, height: 18, right: 164, bottom: 520 });
   pillEl.appendChild(textEl);
   const ttEl = h.doc.getElementById('ag-live-metrics-tooltip');
   ttEl.innerHTML = h.window.__ag_last_metrics.tooltipHtml;
   pillEl.dispatchEvent(new h.window.MouseEvent('mouseenter', { bubbles: true }));
   await h.microtasks();
-  assert.equal(ttEl.style.left, '114px', 'tooltip centers horizontally over centered bottom text instead of flush-left pill edge');
+  assert.equal(ttEl.style.left, '44px', 'tooltip aligns with inline metrics text in middle mode');
 
   /* 4. Next user turn completes with fresh 35k (7%) metrics -> returns to live idle state & re-enables button */
   vp.__reactFiber$t.memoizedProps.trajectorySlice.stepsInSlice.push(
@@ -968,7 +969,7 @@ test('dictation editor isolation, ask-question icon removal & Orchestrator model
   }
   assert.equal(i18nOverride['Orchestrator (Neon)'], 'Orchestrator (Neon)');
 
-  /* 3. syncModelTriggerDisplay restores accidentally translated Orchestrator text and maps XHigh -> Extra */
+  /* 3. syncModelTriggerDisplay shortens Orchestrator -> Orch on the footer trigger and maps XHigh -> Extra */
   const html = `
     <section>
       <div id="antigravity.agentSidePanelInputBox">
@@ -981,7 +982,11 @@ test('dictation editor isolation, ask-question icon removal & Orchestrator model
   await settle(h);
   const btn = h.doc.querySelector('button[data-testid="model-selector-trigger"]');
   assert.equal(btn.getAttribute('data-ag-i18n-ignore'), '1');
-  assert.equal(btn.textContent.trim(), 'Orchestrator (Neon)');
+  assert.equal(btn.textContent.trim(), 'Orch (Neon)');
+
+  btn.querySelector('span').textContent = 'Orchestrator Gemini 4 Neon High';
+  h.window.__t.syncStepStream();
+  assert.equal(btn.textContent.trim(), 'Orch Gemini 4 Neon High');
 
   btn.querySelector('span').textContent = 'Gemini 4 Carbon Extra High';
   h.window.__t.syncStepStream();

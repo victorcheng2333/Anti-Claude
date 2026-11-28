@@ -124,19 +124,9 @@ body:not([data-has-browser-hole="true"]):not([data-has-drawer-browser-hole="true
   color: var(--foreground, #141413) !important;
 }
 
+#ag-live-metrics-pill[data-ag-row-mode="hidden"],
 #ag-live-metrics-pill[data-ag-row-mode="bottom"] {
-  flex: 0 0 auto !important;
-  align-self: stretch !important;
-  box-sizing: border-box !important;
-  width: calc(100% - 8px) !important;
-  max-width: calc(100% - 8px) !important;
-  height: 22px !important;
-  min-height: 22px !important;
-  max-height: 22px !important;
-  margin: 2px 4px 1px 4px !important;
-  padding: 2px 4px 0 6px !important;
-  border-left: none !important;
-  border-top: 1px dashed rgba(0, 0, 0, 0.12) !important;
+  display: none !important;
 }
 
 #ag-live-metrics-pill #ag-live-metrics-text {
@@ -194,10 +184,6 @@ body:not([data-has-browser-hole="true"]):not([data-has-drawer-browser-hole="true
 :is(html[data-ag-theme-mode="dark"] body, body.dark) #ag-live-metrics-pill:hover,
 :is(html[data-ag-theme-mode="dark"] body, body.dark) #ag-live-metrics-pill:hover #ag-live-metrics-text {
   color: var(--foreground, #FAF9F5) !important;
-}
-
-:is(html[data-ag-theme-mode="dark"] body, body.dark) #ag-live-metrics-pill[data-ag-row-mode="bottom"] {
-  border-top-color: rgba(255, 255, 255, 0.12) !important;
 }
 
 :is(html[data-ag-theme-mode="dark"] body, body.dark) #antigravity\.agentSidePanelInputBox #ag-live-metrics-pill .ag-ctx-warn,

@@ -124,7 +124,7 @@ test('[v2.35 orchestratorExecutors] Executor Level-3 menu renders directly from 
   }
 });
 
-test('[v2.35 tooltipNote] active-turn tooltipNote is recognized without drift dot and renders localized hint', { skip: skipDom }, async () => {
+test('[v2.35 tooltipNote] active-turn tooltipNote is recognized without drift dot and redundant top header/note stay hidden', { skip: skipDom }, async () => {
   const note = 'Applies to /btw and messages sent after this turn';
   const { dom, window, doc, triggerBtn } = bootDom({ tooltipNote: note }, { i18n: true });
   try {
@@ -139,24 +139,11 @@ test('[v2.35 tooltipNote] active-turn tooltipNote is recognized without drift do
     assert.equal(nativeRow.getAttribute('data-ag-cm-native-gaps'), null, 'tooltipNote must NOT trigger unknown-field drift gap');
     assert.equal(nativeRow.querySelector('.ag-cm-dot'), null, 'native menu row must NOT show drift dot for tooltipNote');
 
-    const noteEl = mainPop.querySelector('[data-ag-cm-note="1"]');
-    assert.ok(noteEl, 'tooltipNote hint banner renders inside custom model popover');
-    assert.equal(noteEl.textContent, '将用于 /btw 及本轮之后的新消息');
+    assert.equal(mainPop.querySelector('[data-ag-cm-note="1"]'), null, 'redundant tooltipNote banner is omitted');
+    assert.equal(mainPop.querySelector('.ag-cm-sec-hdr'), null, 'redundant Models · This chat header is omitted');
   } finally {
     try { window.__agClaudeUxDispose(); } catch {}
     dom.window.close();
-  }
-
-  const enRun = bootDom({ tooltipNote: note }, { i18n: false });
-  try {
-    enRun.triggerBtn.dispatchEvent(new enRun.window.MouseEvent('pointerdown', { bubbles: true, button: 0 }));
-    await new Promise((r) => setTimeout(r, 30));
-    const noteEl = enRun.doc.querySelector('#ag-claude-model-popover [data-ag-cm-note="1"]');
-    assert.ok(noteEl, 'tooltipNote hint banner renders in English mode');
-    assert.equal(noteEl.textContent, note);
-  } finally {
-    try { enRun.window.__agClaudeUxDispose(); } catch {}
-    enRun.dom.window.close();
   }
 
   const idleRun = bootDom({});
@@ -164,6 +151,7 @@ test('[v2.35 tooltipNote] active-turn tooltipNote is recognized without drift do
     idleRun.triggerBtn.dispatchEvent(new idleRun.window.MouseEvent('pointerdown', { bubbles: true, button: 0 }));
     await new Promise((r) => setTimeout(r, 30));
     assert.equal(idleRun.doc.querySelector('#ag-claude-model-popover [data-ag-cm-note="1"]'), null, 'idle state hides note banner');
+    assert.equal(idleRun.doc.querySelector('#ag-claude-model-popover .ag-cm-sec-hdr'), null, 'idle state hides top header');
   } finally {
     try { idleRun.window.__agClaudeUxDispose(); } catch {}
     idleRun.dom.window.close();

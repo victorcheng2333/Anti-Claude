@@ -153,6 +153,7 @@
   window.__ag_cleanup_fns.push(() => {
     runtimeDisposed = true;
     window.__ag_rpc_session_id = '';
+    clearMetricsHoverTimer();
   });
 
   if (window.__ag_dcl_handler) {
@@ -524,6 +525,24 @@
   /* Composer live metrics pill (#ag-live-metrics-pill) & route observer */
   const MIDDLE_ENTER_BOTTOM_PX = 165;
   const MIDDLE_EXIT_BOTTOM_PX = 180;
+  const METRICS_HOVER_OPEN_DELAY_MS = 180;
+  const METRICS_HOVER_OWNER = Symbol('ag-metrics-hover');
+  let metricsHoverOpenTimer = 0;
+
+  function clearMetricsHoverTimer() {
+    if (metricsHoverOpenTimer) {
+      clearTimeout(metricsHoverOpenTimer);
+      metricsHoverOpenTimer = 0;
+    }
+  }
+
+  function hasCompetingMetricsPopoverOpen() {
+    const modelPop = document.getElementById('ag-claude-model-popover');
+    if (modelPop && modelPop.getAttribute('data-open') === 'true') return true;
+    const quotaPop = document.getElementById('ag-claude-quota-popover');
+    if (quotaPop && quotaPop.getAttribute('data-open') === 'true') return true;
+    return false;
+  }
 
   function extractCascadeId() {
     try {
@@ -636,6 +655,7 @@
   function ensureMetricsPill(forceLayout = false, resetHysteresis = false) {
     if (runtimeDisposed || !ENABLED) return null;
     if (!MODULES.metrics) {
+      clearMetricsHoverTimer();
       const existing = document.getElementById('ag-live-metrics-pill');
       if (existing) existing.style.display = 'none';
       return null;
@@ -648,27 +668,80 @@
     const rightGroup = bottomRow.children[1] || null;
 
     let pill = document.getElementById('ag-live-metrics-pill');
+    let prevInlineHtml = '';
+    let prevDisplay = '';
+    if (pill && !pill.__agHoverAbort) {
+      const prevText = pill.querySelector('#ag-live-metrics-text');
+      prevInlineHtml = prevText ? prevText.innerHTML : '';
+      prevDisplay = pill.style.display || '';
+      pill.remove();
+      pill = null;
+    }
     let isNewPill = false;
     if (!pill) {
       isNewPill = true;
       pill = document.createElement('div');
       pill.id = 'ag-live-metrics-pill';
       pill.innerHTML = '<span id="ag-live-metrics-text"></span>';
-      pill.addEventListener('mouseenter', () => {
-        const tt = ensureMetricsTooltip();
-        if (!tt || !tt.innerHTML) return;
-        const r = pill.getBoundingClientRect();
-        const ttWidth = Math.min(440, Math.max(370, tt.offsetWidth || 400));
-        const left = Math.max(12, Math.min(r.left, window.innerWidth - ttWidth - 16));
-        const bottomPx = Math.min(window.innerHeight - r.top + 8, window.innerHeight - (tt.offsetHeight || 220) - 12);
-        tt.style.left = left + 'px';
-        tt.style.bottom = Math.max(8, bottomPx) + 'px';
-        tt.setAttribute('data-visible', '1');
-      });
-      pill.addEventListener('mouseleave', () => {
-        const tt = document.getElementById('ag-live-metrics-tooltip');
-        if (tt) tt.removeAttribute('data-visible');
-      });
+      if (prevInlineHtml) {
+        const nextText = pill.querySelector('#ag-live-metrics-text');
+        if (nextText) nextText.innerHTML = prevInlineHtml;
+      }
+      if (prevDisplay) pill.style.display = prevDisplay;
+    }
+    if (pill.__agHoverOwner !== METRICS_HOVER_OWNER) {
+      if (pill.__agHoverAbort) {
+        try {
+          pill.__agHoverAbort.abort();
+        } catch {}
+      }
+      const hoverCtrl = typeof AbortController === 'function' ? new AbortController() : null;
+      pill.__agHoverAbort = hoverCtrl || { abort() {} };
+      pill.__agHoverOwner = METRICS_HOVER_OWNER;
+      const listenerOpts = hoverCtrl ? { signal: hoverCtrl.signal } : undefined;
+      pill.addEventListener(
+        'mouseenter',
+        () => {
+          clearMetricsHoverTimer();
+          if (hasCompetingMetricsPopoverOpen()) return;
+          metricsHoverOpenTimer = setTimeout(() => {
+            metricsHoverOpenTimer = 0;
+            if (
+              runtimeDisposed ||
+              !ENABLED ||
+              !MODULES.metrics ||
+              !pill.isConnected ||
+              pill.getAttribute('data-ag-row-mode') === 'hidden' ||
+              hasCompetingMetricsPopoverOpen()
+            ) {
+              return;
+            }
+            const tt = ensureMetricsTooltip();
+            if (!tt || !tt.innerHTML) return;
+            if (!tt.querySelector('.ag-ux-tt') || !tt.style.left) {
+              const r = pill.getBoundingClientRect();
+              const ttWidth = Math.min(440, Math.max(370, tt.offsetWidth || 400));
+              const left = Math.max(12, Math.min(r.left, window.innerWidth - ttWidth - 16));
+              const bottomPx = Math.min(window.innerHeight - r.top + 8, window.innerHeight - (tt.offsetHeight || 220) - 12);
+              tt.style.left = left + 'px';
+              tt.style.bottom = Math.max(8, bottomPx) + 'px';
+            }
+            tt.setAttribute('data-visible', '1');
+          }, METRICS_HOVER_OPEN_DELAY_MS);
+        },
+        listenerOpts
+      );
+      pill.addEventListener(
+        'mouseleave',
+        () => {
+          clearMetricsHoverTimer();
+          const tt = document.getElementById('ag-live-metrics-tooltip');
+          if (tt && tt.getAttribute('data-ag-pinned') !== '1') {
+            tt.removeAttribute('data-visible');
+          }
+        },
+        listenerOpts
+      );
     }
 
     syncMetricsResizeObserver(bottomRow, leftGroup, rightGroup);
@@ -681,8 +754,7 @@
     const leftW = measureNaturalLeftWidth(leftGroup);
     const rightW = rightGroup ? rightGroup.offsetWidth || 0 : 0;
     const curLayoutSig = rowW + ':' + leftW + ':' + rightW;
-    const isMountedHere =
-      pill.parentElement === leftGroup || (bottomRow.parentElement && pill.parentElement === bottomRow.parentElement);
+    const isMountedHere = pill.parentElement === leftGroup;
     if (!forceLayout && !isNewPill && isMountedHere && window.__ag_last_metrics_layout_sig === curLayoutSig) {
       return pill;
     }
@@ -690,9 +762,11 @@
     window.__ag_last_metrics_layout_sig = curLayoutSig;
     const availMiddleW = rowW - leftW - rightW - 8;
     const prevMode = resetHysteresis ? 'middle' : pill.getAttribute('data-ag-row-mode') || 'middle';
-    const useBottomRow =
-      prevMode === 'bottom' ? availMiddleW < MIDDLE_EXIT_BOTTOM_PX : availMiddleW < MIDDLE_ENTER_BOTTOM_PX;
-    const rowMode = useBottomRow ? 'bottom' : 'middle';
+    const hideForNarrow =
+      prevMode === 'hidden' || prevMode === 'bottom'
+        ? availMiddleW < MIDDLE_EXIT_BOTTOM_PX
+        : availMiddleW < MIDDLE_ENTER_BOTTOM_PX;
+    const rowMode = hideForNarrow ? 'hidden' : 'middle';
 
     if (bottomRow.getAttribute('data-ag-row-mode') !== rowMode) {
       bottomRow.setAttribute('data-ag-row-mode', rowMode);
@@ -701,13 +775,16 @@
       pill.setAttribute('data-ag-row-mode', rowMode);
     }
 
-    if (useBottomRow) {
-      const cardParent = bottomRow.parentElement;
-      if (cardParent && (pill.parentElement !== cardParent || pill.previousElementSibling !== bottomRow)) {
-        bottomRow.after(pill);
-      }
-    } else if (pill.parentElement !== leftGroup) {
+    if (pill.parentElement !== leftGroup) {
       leftGroup.appendChild(pill);
+    }
+    if (hideForNarrow) {
+      clearMetricsHoverTimer();
+      const tt = document.getElementById('ag-live-metrics-tooltip');
+      if (tt) {
+        tt.removeAttribute('data-visible');
+        tt.removeAttribute('data-ag-pinned');
+      }
     }
 
     return pill;
