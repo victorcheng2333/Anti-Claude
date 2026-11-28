@@ -1189,6 +1189,173 @@ html:not([data-ag-theme-mode="dark"]) body:not(.dark) :is([data-testid="planner-
   box-shadow: inset 0 0 0 1px rgba(0, 0, 0, 0.06) !important;
 }
 
+/* 3.7b Selection Action Pill (.agy-selection-pill: Quote / Side Question / Comment / Add to Chat) */
+@keyframes agSelectionPillIn {
+  from {
+    opacity: 0;
+    transform: translateY(-2px) scale(0.985);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+.selection-popup > .agy-selection-pill {
+  margin-top: 6px !important;
+}
+
+body .agy-selection-pill {
+  display: inline-flex !important;
+  align-items: center !important;
+  gap: 5px !important;
+  padding: 3px !important;
+  border-radius: 9999px !important;
+  overflow: hidden !important;
+  font-family: var(--font-sans) !important;
+  letter-spacing: 0 !important;
+  text-shadow: none !important;
+  -webkit-font-smoothing: antialiased !important;
+  animation: agSelectionPillIn 110ms cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  body .agy-selection-pill {
+    animation: none !important;
+  }
+}
+
+html:not([data-ag-theme-mode="dark"]) body:not(.dark) .agy-selection-pill {
+  background-color: #FFFFFF !important;
+  border: 1px solid rgba(20, 20, 19, 0.11) !important;
+  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.09), 0 1px 3px rgba(0, 0, 0, 0.05) !important;
+  color: #191918 !important;
+}
+
+:is(html[data-ag-theme-mode="dark"] body, body.dark) .agy-selection-pill {
+  background-color: #282826 !important;
+  border: 1px solid rgba(255, 255, 255, 0.12) !important;
+  box-shadow: 0 10px 26px rgba(0, 0, 0, 0.45), 0 2px 6px rgba(0, 0, 0, 0.28) !important;
+  color: #ECECEA !important;
+}
+
+body .agy-selection-pill > button {
+  position: relative !important;
+  display: inline-flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  gap: 5px !important;
+  height: 22px !important;
+  min-height: 22px !important;
+  padding: 0 9px !important;
+  border: none !important;
+  border-left: none !important;
+  border-radius: 9999px !important;
+  background-color: transparent !important;
+  font-family: var(--font-sans) !important;
+  font-size: 12px !important;
+  font-weight: 500 !important;
+  line-height: 1 !important;
+  letter-spacing: 0 !important;
+  white-space: nowrap !important;
+  transition: background-color 110ms ease, color 110ms ease !important;
+}
+
+/* Icon-only action button (e.g., Artifact Code Search) stays a balanced pill circle */
+body .agy-selection-pill > button[data-testid="selection-code-search-button"] {
+  min-width: 24px !important;
+  padding: 0 6px !important;
+}
+
+/* Soft centered short vertical divider between adjacent buttons (replaces full-height border-l) */
+body .agy-selection-pill > button + button::before {
+  content: "" !important;
+  position: absolute !important;
+  left: -3px !important;
+  top: 50% !important;
+  transform: translateY(-50%) !important;
+  width: 1px !important;
+  height: 12px !important;
+  border-radius: 1px !important;
+  pointer-events: none !important;
+}
+
+html:not([data-ag-theme-mode="dark"]) body:not(.dark) .agy-selection-pill > button + button::before {
+  background-color: rgba(20, 20, 19, 0.11) !important;
+}
+
+:is(html[data-ag-theme-mode="dark"] body, body.dark) .agy-selection-pill > button + button::before {
+  background-color: rgba(255, 255, 255, 0.12) !important;
+}
+
+html:not([data-ag-theme-mode="dark"]) body:not(.dark) .agy-selection-pill > button {
+  color: #191918 !important;
+}
+
+html:not([data-ag-theme-mode="dark"]) body:not(.dark) .agy-selection-pill > button:hover {
+  background-color: #F2F2EF !important;
+}
+
+html:not([data-ag-theme-mode="dark"]) body:not(.dark) .agy-selection-pill > button:active {
+  background-color: #EAEAE6 !important;
+}
+
+:is(html[data-ag-theme-mode="dark"] body, body.dark) .agy-selection-pill > button {
+  color: #ECECEA !important;
+}
+
+:is(html[data-ag-theme-mode="dark"] body, body.dark) .agy-selection-pill > button:hover {
+  background-color: rgba(255, 255, 255, 0.08) !important;
+}
+
+:is(html[data-ag-theme-mode="dark"] body, body.dark) .agy-selection-pill > button:active {
+  background-color: rgba(255, 255, 255, 0.12) !important;
+}
+
+body .agy-selection-pill > button > span {
+  display: inline-flex !important;
+  align-items: center !important;
+  font-family: var(--font-sans) !important;
+  font-size: 12px !important;
+  font-weight: 500 !important;
+  line-height: 1 !important;
+  letter-spacing: 0 !important;
+}
+
+body .agy-selection-pill > button > span.opacity-50 {
+  opacity: 1 !important;
+  font-size: 11px !important;
+  font-weight: 400 !important;
+  letter-spacing: 0.02em !important;
+  font-variant-numeric: tabular-nums !important;
+}
+
+html:not([data-ag-theme-mode="dark"]) body:not(.dark) .agy-selection-pill > button > span.opacity-50 {
+  color: #8E8D88 !important;
+}
+
+html:not([data-ag-theme-mode="dark"]) body:not(.dark) .agy-selection-pill > button:hover > span.opacity-50 {
+  color: #6B6A66 !important;
+}
+
+:is(html[data-ag-theme-mode="dark"] body, body.dark) .agy-selection-pill > button > span.opacity-50 {
+  color: #8E8D88 !important;
+}
+
+:is(html[data-ag-theme-mode="dark"] body, body.dark) .agy-selection-pill > button:hover > span.opacity-50 {
+  color: #B5B3AD !important;
+}
+
+body .agy-selection-pill > button > svg {
+  width: 13px !important;
+  height: 13px !important;
+  opacity: 0.78 !important;
+}
+
+body .agy-selection-pill > button:hover > svg {
+  opacity: 1 !important;
+}
+
 /* 3.8 Interleaved Step Stream & Bi-Directional Collapse Animation */
 div[data-ag-inline-stream="true"] > button[data-testid="worked-for-collapsible"][aria-expanded="true"] {
   display: none !important;

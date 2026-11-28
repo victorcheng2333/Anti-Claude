@@ -4513,3 +4513,38 @@ test('Overview Review shortcut tile replaces icon slot with in-flow diff stats i
   );
 });
 
+test('Selection action pill (.agy-selection-pill) uses concentric inset pill layout, soft centered divider, and hierarchy', () => {
+  const css = fs.readFileSync(path.join(REPO, 'user', 'custom.css'), 'utf8');
+  assert.match(
+    css,
+    /\.selection-popup\s*>\s*\.agy-selection-pill\s*\{[\s\S]*?margin-top:\s*6px\s*!important;/,
+    'selection pill must offset below the selection highlight to avoid overlapping selected text'
+  );
+  assert.match(
+    css,
+    /html:not\(\[data-ag-theme-mode="dark"\]\)\s+body:not\(\.dark\)\s+\.agy-selection-pill\s*\{[\s\S]*?background-color:\s*#FFFFFF\s*!important;[\s\S]*?border:\s*1px solid[\s\S]*?box-shadow:/,
+    'light mode selection pill must define clean surface, border, and neutral shadow'
+  );
+  assert.match(
+    css,
+    /:is\(html\[data-ag-theme-mode="dark"\]\s+body,\s*body\.dark\)\s+\.agy-selection-pill\s*\{[\s\S]*?background-color:\s*#282826\s*!important;[\s\S]*?border:\s*1px solid[\s\S]*?box-shadow:/,
+    'dark mode selection pill must define elevated surface, border, and shadow'
+  );
+  assert.match(
+    css,
+    /body\s+\.agy-selection-pill\s*>\s*button\s*\{[\s\S]*?border-left:\s*none\s*!important;[\s\S]*?border-radius:\s*9999px\s*!important;/,
+    'selection pill buttons must clear native full-height border-l and use concentric pill radius'
+  );
+  assert.match(
+    css,
+    /body\s+\.agy-selection-pill\s*>\s*button\s*\+\s*button::before\s*\{[\s\S]*?width:\s*1px\s*!important;[\s\S]*?height:\s*12px\s*!important;/,
+    'adjacent selection pill buttons must render a soft centered short vertical divider'
+  );
+  assert.match(
+    css,
+    /body\s+\.agy-selection-pill\s*>\s*button\s*>\s*span\.opacity-50\s*\{[\s\S]*?opacity:\s*1\s*!important;[\s\S]*?font-size:\s*11px\s*!important;/,
+    'shortcut labels must replace translucent opacity-50 with crisp solid 11px secondary typography'
+  );
+});
+
+
