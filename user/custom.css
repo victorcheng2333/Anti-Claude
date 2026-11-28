@@ -182,7 +182,7 @@ body[data-agy-font] :where(.font-sans),
 
 :is([data-testid="planner-response-text"], [data-markdown-root], .prose, .markdown) :is(p, li, blockquote, td, th) {
   font-size: var(--ag-chat-font-size, 14px) !important;
-  line-height: 1.65 !important;
+  line-height: 1.62 !important;
   color: var(--foreground) !important;
   text-wrap: pretty !important;
   line-break: strict !important;
@@ -194,7 +194,7 @@ body[data-agy-font] :where(.font-sans),
 }
 
 :is([data-testid="planner-response-text"], [data-markdown-root], .prose, .markdown) li + li {
-  margin-top: 0.42em !important;
+  margin-top: 0.32em !important;
 }
 
 :is([data-testid="planner-response-text"], [data-markdown-root], .prose, .markdown) :is(h1, h2, h3, h4) {
